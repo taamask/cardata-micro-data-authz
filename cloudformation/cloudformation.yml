@@ -173,14 +173,13 @@ Resources:
           Image: !Sub ${ImageUrl}/${Platform}-${ServiceName}:${Version}
           Memory: !Ref Memory
           PortMappings:
-            - ContainerPort: 80
-            - ContainerPort: 81
-            - ContainerPort: 82
+            - ContainerPort: 50051
+            - ContainerPort: 8443
           Environment:
             - Name: VERSION
               Value: !Ref Version
             - Name: SPICEDB_DATASTORE_CONN_URI
-              Value: postgres://postgres:password@database-2-instance-1.cbuvgyauszmh.us-east-1.rds.amazonaws.com:5432/spicedb?sslmode=disable
+              Value: postgres://postgres:password@ec2-54-225-181-18.compute-1.amazonaws.com:5432/spicedb?sslmode=disable
             - Name: SPICEDB_DATASTORE_ENGINE
               Value: postgres
             - Name: SPICEDB_GRPC_PRESHARED_KEY
