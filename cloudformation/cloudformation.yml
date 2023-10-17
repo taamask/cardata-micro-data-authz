@@ -13,11 +13,11 @@ Parameters:
   ServiceName:
     Type: String
     Description: Service Name
-    Default: micro-data-insights
+    Default: micro-data-authz
   ShortName:
     Type: String
     Description: Short Name
-    Default: "micro-cvh-insights"
+    Default: micro-data-authz
   Platform:
     Type: String
     Description: Platform
@@ -162,7 +162,7 @@ Resources:
       Cpu: !Ref Cpu
       Memory: !Ref Memory
       TaskRoleArn: !Ref TaskRole
-      ExecutionRoleArn: arn:aws:iam::481543810001:role/cardata-micro-data-insigh-CodePipelineCodeBuildRole-HicpZCOW9f91
+      ExecutionRoleArn: arn:aws:iam::481543810001:role/cardata-micro-data-authz--CodePipelineCodeBuildRole-frKX0mTOVup7
       RequiresCompatibilities:
         - FARGATE
       NetworkMode: awsvpc
