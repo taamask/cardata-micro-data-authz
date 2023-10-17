@@ -1,0 +1,261 @@
+schema: |-
+  definition user {
+  	relation partner: partner
+  }
+
+  definition organization_fqdn {}
+
+  caveat is_in_organization_fqdn(organization_fqdn string, user_fqdn string) {
+  	user_fqdn == organization_fqdn
+  }
+
+  definition organization_role {
+      relation role_organization: organization
+      relation member: user
+  }
+
+  definition organization {
+  	relation platform_admin: organization_role#member with is_in_organization_fqdn
+  	relation platform_support: organization_role#member
+  	relation account_manager: organization_role#member
+
+  	permission can_create_platform_user = platform_admin
+  	permission can_create_partner = platform_admin + account_manager
+
+  	permission can_assign_role_account_manager = platform_admin
+  	permission can_assign_role_platform_admin = platform_admin
+  	permission can_assign_role_platform_support = platform_admin
+
+  	permission can_revoke_role_account_manager = platform_admin
+  	permission can_revoke_role_platform_admin = platform_admin
+  	permission can_revoke_role_platform_support = platform_admin
+
+  	//ToDo: account manager to be added to performance (only associated with the actual partner)
+  	permission can_view_performance = platform_admin
+
+  	//permission can_create_product = platform_admin
+  }
+
+  definition partner {
+  	relation parent_organization: organization
+  	relation partner_user: user
+  	relation partner_admin: user
+  	relation api_key_manager: user
+  	relation dashboard_user: user
+
+
+  	//Technical/calculated relations
+      permission account_manager = (parent_organization->account_manager & partner_user)
+  	permission partner_manager = partner_admin + account_manager + parent_organization->platform_admin
+  	permission all_partner_user = partner_user + partner_manager
+  	
+  	// synthetic relation
+  	permission synthetic_relation_platform_admin = parent_organization->platform_admin
+  	permission synthetic_relation_platform_support = parent_organization->platform_support
+
+  	permission can_test = api_key_manager & partner_user
+
+  	//User who can access that specific partner instance
+  	permission can_view_partner = parent_organization->platform_support + partner_manager
+
+  	//User management
+  	permission can_create_partner_user = synthetic_relation_platform_admin + parent_organization->platform_support + partner_admin + account_manager
+  	permission can_manage_user = synthetic_relation_platform_admin + parent_organization->platform_support + partner_admin
+  	permission can_deassociate_user_from_partner = synthetic_relation_platform_admin + partner_admin
+
+  	//Partner management
+  	permission can_edit_partner_metadata = partner_manager
+  	permission can_associate_subscription = synthetic_relation_platform_admin + account_manager
+  	permission can_manage_subscription = synthetic_relation_platform_admin + account_manager
+  	permission can_view_subscription = partner_manager
+
+  	//Role assignment
+  	permission can_assign_role_partner_admin = partner_manager
+  	permission can_assign_role_partner_api_manager = partner_manager
+
+  	//Role revoke
+  	permission can_revoke_role_partner_admin = synthetic_relation_platform_admin + account_manager
+  	permission can_revoke_role_partner_api_manager = synthetic_relation_platform_admin + partner_admin
+
+  	//Subfleet and vehicle management
+  	permission can_create_subfleet = synthetic_relation_platform_admin + partner_admin
+  	permission can_edit_subfleet_metadata = synthetic_relation_platform_admin + partner_admin
+  	permission can_list_all_subfleets = synthetic_relation_platform_admin + parent_organization->platform_support + partner_admin
+  	permission can_manage_vehicle_request = synthetic_relation_platform_admin + partner_admin
+  	permission can_list_all_vehicle_request = synthetic_relation_platform_admin + parent_organization->platform_support + partner_admin
+  	permission can_remove_subfleet = synthetic_relation_platform_admin + partner_admin
+  	permission can_deassociate_user_from_subfleet = synthetic_relation_platform_admin + partner_admin
+  	permission can_deassociate_vehicle_from_subfleet = synthetic_relation_platform_admin + partner_admin
+  	permission can_remove_vehicle = synthetic_relation_platform_admin + partner_admin
+  	permission can_list_all_subfleet = partner_manager
+  	permission approve_vehicle = synthetic_relation_platform_admin  + partner_admin
+
+  	//Includes associating vehicles to subfleets / create vehicle
+  	permission can_create_vehicle = synthetic_relation_platform_admin + partner_admin
+  	permission can_associate_user_to_subfleet = synthetic_relation_platform_admin + partner_admin
+
+  	//Headless api management !!!WATCH OUT BOTH THESE PERMISSIONS AND THE RELEVANT SUBSCRIPTION NEED TO BE CHECKED!!!
+  	permission can_generate_api_key = synthetic_relation_platform_admin + api_key_manager + partner_admin 
+  	permission can_list_all_api_key = synthetic_relation_platform_admin + api_key_manager + partner_admin
+  	permission can_remove_api_key = synthetic_relation_platform_admin + api_key_manager + partner_admin
+
+  	// subscription management
+  	permission manage_subscription = account_manager + synthetic_relation_platform_admin
+  	permission view_subscription = partner_manager
+  	permission can_revoke_subscription = synthetic_relation_platform_admin + account_manager
+  }
+
+  definition subfleet {
+  	relation owner: partner
+  	relation parent_subfleet: subfleet
+  	relation subfleet_member: user
+
+  	permission synthetic_relation_platform_admin = owner->synthetic_relation_platform_admin
+  	permission synthetic_relation_partner_admin = owner->partner_admin
+  	permission synthetic_relation_platform_support = owner->synthetic_relation_platform_support
+  	permission synthetic_relation_subfleet_member = (subfleet_member + parent_subfleet->synthetic_relation_subfleet_member) & owner->partner_user
+  	
+  	//To be reviewed
+  	permission can_create_vehicle_deassociation_request = synthetic_relation_platform_admin + synthetic_relation_partner_admin + synthetic_relation_subfleet_member
+  	permission can_remove_note = synthetic_relation_platform_admin + synthetic_relation_partner_admin + synthetic_relation_subfleet_member
+  	permission can_create_vehicle_request = synthetic_relation_platform_admin + synthetic_relation_partner_admin + synthetic_relation_subfleet_member
+  	permission can_view_subfleet = synthetic_relation_platform_admin + synthetic_relation_partner_admin + synthetic_relation_subfleet_member
+  	permission can_order_and_manage_dongle = synthetic_relation_platform_admin + synthetic_relation_partner_admin + synthetic_relation_subfleet_member
+  	//To be reviewed with business
+  	permission can_connect_to_oem = synthetic_relation_platform_admin + synthetic_relation_partner_admin + synthetic_relation_subfleet_member
+  	permission can_create_note = synthetic_relation_platform_admin + synthetic_relation_partner_admin + synthetic_relation_subfleet_member
+  }
+
+  //The following definitions are serving the purpose to check whether a specific endpoint can be called with the user's partner's purchased product
+  definition subscription {
+  	relation subscriber: partner
+  }
+
+  definition product {
+  	relation parent_organization: organization
+  	relation associated_subscription: subscription
+  	//relation api_controller_method: api_controller_method
+
+  	permission associated_partner = associated_subscription->subscriber
+  	permission can_access = associated_partner + parent_organization->platform_admin + parent_organization->account_manager
+  }
+
+  // // ToDo: create a convention e.g.: {service-name}-{env}-{controller-class}-{method} dip-micro-b2b-backstage-qa-develop-/api/b2b/vehicle
+  // definition api_controller_method {}
+relationships: |-
+  //set up organization roles
+  organization_role:platform_admin#role_organization@organization:thebb
+  organization_role:account_manager#role_organization@organization:thebb
+  organization_role:platform_support#role_organization@organization:thebb
+
+  //set up organization's role relations
+  organization:thebb#platform_admin@organization_role:platform_admin#member[is_in_organization_fqdn:{"organization_fqdn":"thebb.com"}]
+  organization:thebb#account_manager@organization_role:account_manager#member
+  organization:thebb#platform_support@organization_role:platform_support#member
+
+  //set up the organization's platform admins
+  organization_role:platform_admin#member@user:tomi
+
+  //set up the organization's account managers
+  organization_role:account_manager#member@user:ben
+  organization_role:account_manager#member@user:claire
+
+  //set up partners
+  partner:dhl#parent_organization@organization:thebb
+  partner:wizz#parent_organization@organization:thebb
+
+  //assign account managers to their partners
+  partner:dhl#partner_user@user:ben
+  partner:wizz#partner_user@user:claire
+
+  //set up partner users
+  partner:dhl#partner_user@user:marika
+  partner:dhl#partner_user@user:feri
+  partner:dhl#partner_user@user:mate
+  partner:dhl#partner_user@user:bela
+  partner:dhl#partner_user@user:neo
+
+  //assign partner admin role to users
+  partner:dhl#partner_admin@user:feri
+
+  //assign api key manager role to users
+  partner:dhl#api_key_manager@user:mate
+
+  //set up subfleets
+  subfleet:budapest_south#owner@partner:dhl
+  subfleet:siofok#owner@partner:dhl
+  subfleet:kispest#owner@partner:dhl
+  subfleet:kispest#parent_subfleet@subfleet:budapest_south
+
+  //add members to subfleets
+  subfleet:budapest_south#subfleet_member@user:bela
+  subfleet:kispest#subfleet_member@user:neo
+
+  //set up products
+  product:dashboard#parent_organization@organization:thebb
+  product:headless_api#parent_organization@organization:thebb
+
+  //set up partner subscriptions
+  subscription:sub1263155181#subscriber@partner:dhl
+  subscription:sub993155181#subscriber@partner:fedex
+
+  //assign subscriptions to products
+  product:dashboard#associated_subscription@subscription:sub1263155181
+  product:headless_api#associated_subscription@subscription:sub993155181
+assertions:
+  assertTrue:
+    - organization:thebb#can_create_platform_user@user:tomi with {"user_fqdn":"thebb.com"}
+    - 'organization:thebb#can_create_platform_user@user:tomi with {"user_fqdn": "thebb.com"}'
+    - 'organization:thebb#can_create_partner@user:tomi with {"user_fqdn": "thebb.com"}'
+    - 'partner:dhl#partner_manager@user:tomi with {"user_fqdn": "thebb.com"}'
+    - 'partner:dhl#all_partner_user@user:tomi with {"user_fqdn": "thebb.com"}'
+    - 'partner:dhl#can_create_subfleet@user:tomi with {"user_fqdn": "thebb.com"}'
+    - 'partner:dhl#approve_vehicle@user:tomi with {"user_fqdn": "thebb.com"}'
+    - 'partner:dhl#can_create_partner_user@user:tomi with {"user_fqdn": "thebb.com"}'
+    - 'partner:dhl#can_assign_role_partner_admin@user:tomi with {"user_fqdn": "thebb.com"}'
+    - 'partner:dhl#manage_subscription@user:tomi with {"user_fqdn": "thebb.com"}'
+    - 'partner:dhl#view_subscription@user:tomi with {"user_fqdn": "thebb.com"}'
+    - 'subfleet:budapest_south#can_view_subfleet@user:tomi with {"user_fqdn": "thebb.com"}'
+    - 'subfleet:budapest_south#can_create_vehicle_request@user:tomi with {"user_fqdn": "thebb.com"}'
+    - subfleet:siofok#can_view_subfleet@user:feri
+    - subfleet:siofok#can_create_vehicle_request@user:feri
+    - partner:dhl#partner_manager@user:feri
+    - partner:dhl#all_partner_user@user:feri
+    - partner:dhl#can_create_subfleet@user:feri
+    - partner:dhl#approve_vehicle@user:feri
+    - partner:dhl#can_create_partner_user@user:feri
+    - partner:dhl#can_assign_role_partner_admin@user:feri
+    - partner:dhl#view_subscription@user:feri
+    - subfleet:budapest_south#can_view_subfleet@user:feri
+    - subfleet:budapest_south#can_create_vehicle_request@user:feri
+    - subfleet:siofok#can_view_subfleet@user:feri
+    - subfleet:siofok#can_create_vehicle_request@user:feri
+    - organization:thebb#can_create_partner@user:ben
+    - partner:dhl#partner_manager@user:ben
+    - partner:dhl#all_partner_user@user:ben
+    - partner:dhl#can_create_partner_user@user:ben
+    - partner:dhl#can_assign_role_partner_admin@user:ben
+    - partner:dhl#manage_subscription@user:ben
+    - partner:dhl#view_subscription@user:ben
+    - product:dashboard#can_access@user:tomi with {"user_fqdn":"thebb.com"}
+    - product:dashboard#can_access@partner:dhl
+    - product:headless_api#can_access@partner:fedex
+    - product:headless_api#can_access@user:tomi with {"user_fqdn":"thebb.com"}
+    - subfleet:kispest#can_view_subfleet@user:bela
+    - subfleet:kispest#can_view_subfleet@user:neo
+  assertFalse:
+    - organization:thebb#can_create_platform_user@user:feri
+    - organization:thebb#can_create_partner@user:feri
+    - partner:dhl#manage_subscription@user:feri
+    - organization:thebb#can_create_platform_user@user:tomi with {"user_fqdn":"thecc.com"}
+    - organization:thebb#can_create_platform_user@account_manager:ben
+    - partner:dhl#can_create_subfleet@account_manager:ben
+    - partner:dhl#approve_vehicle@account_manager:ben
+    - product:headless_api#can_access@partner:dhl
+    - product:dashboard#can_access@partner:fedex
+    - subfleet:budapest_south#can_view_subfleet@user:ben
+    - subfleet:siofok#can_view_subfleet@user:ben
+    - subfleet:budapest_south#can_create_vehicle_request@user:ben
+    - subfleet:siofok#can_create_vehicle_request@user:ben
+    - subfleet:budapest_south#can_view_subfleet@user:neo
+validation: {}
