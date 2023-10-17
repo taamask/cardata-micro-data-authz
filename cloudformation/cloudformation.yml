@@ -95,12 +95,7 @@ Resources:
               - "dynamodb:BatchGetItem"
               - "dynamodb:DescribeTable"
               - "sqs:ReceiveMessage"
-            Resource:
-              - !GetAtt DeviceTokenTable.Arn
-              - !GetAtt NotificationTable.Arn
-              - !GetAtt VehicleMemberAssociationTable.Arn
-              - !GetAtt PushNotificationDeviceTokenQueue.Arn
-              - !GetAtt BatteryModelInsightsQueue.Arn
+            Resource: "*"
 
   #######
   #
@@ -185,7 +180,7 @@ Resources:
             - Name: VERSION
               Value: !Ref Version
             - Name: SPICEDB_DATASTORE_CONN_URI
-              Value: postgres://postgres:password@database-2.cluster-cbuvgyauszmh.us-east-1.rds.amazonaws.com:5432/spicedb?sslmode=disable
+              Value: postgres://postgres:password@database-2-instance-1.cbuvgyauszmh.us-east-1.rds.amazonaws.com:5432/spicedb?sslmode=disable
             - Name: SPICEDB_DATASTORE_ENGINE
               Value: postgres
             - Name: SPICEDB_GRPC_PRESHARED_KEY
