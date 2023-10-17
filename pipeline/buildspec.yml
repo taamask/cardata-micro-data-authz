@@ -5,7 +5,7 @@ proxy:
 phases:
   install:
     runtime-versions:
-      golang: 1.20
+      golang: 1.14
     commands:
       - $(aws ecr get-login --region ${AWS_REGION} --no-include-email)
   pre_build:
