@@ -188,6 +188,10 @@ Resources:
         - Name: RELEASE
           Value: develop
           Type: PLAINTEXT
+        - Name: AWS_REGION
+          Value: !Ref AWS::Region
+        - Name: AWS_ACCOUNT_ID
+          Value: !Ref AWS::AccountId
       Source:
         Type: CODEPIPELINE
         BuildSpec: pipeline/buildspec.yml
