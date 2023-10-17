@@ -75,103 +75,6 @@ Resources:
   #
   #######
 
-  SNSTopic:
-    Type: "AWS::SNS::Topic"
-    Properties:
-      TopicName: !Sub cardata-${ShortName}-${Env}-${EnvId}
-
-  SSMSNSTopic:
-    Type: "AWS::SSM::Parameter"
-    Properties:
-      Description: SNS Topic
-      Name: !Sub /infrastructure-config/${ShortName}.${Env}-${EnvId}/SNSTopic
-      Type: String
-      Value: !Ref SNSTopic
-
-## QUEUE FOR BATTERY MODEL OUTPUT
-
-  BatteryModelInsightsQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      RedrivePolicy:
-        deadLetterTargetArn:
-          Fn::GetAtt:
-            - "BatteryModelInsightsDLQueue"
-            - "Arn"
-        maxReceiveCount: 5
-
-  BatteryModelInsightsQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      PolicyDocument:
-        Statement:
-          - Effect: Allow
-            Action:
-              - "sqs:SendMessage"
-              - "sqs:ReceiveMessage"
-              - "sqs:DeleteMessage"
-            Principal:
-              AWS: '*'
-            Resource: !GetAtt BatteryModelInsightsQueue.Arn
-      Queues:
-        - !Ref BatteryModelInsightsQueue
-
-  BatteryModelInsightsDLQueue:
-    Type: AWS::SQS::Queue
-
-  BatteryModelInsightsQueueSNSSubscription:
-    Type: AWS::SNS::Subscription
-    Properties:
-      Protocol: sqs
-      RawMessageDelivery: true
-      Endpoint: !GetAtt BatteryModelInsightsQueue.Arn
-      TopicArn: !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:cardata-${ShortName}-${Env}-${EnvId}"
-      FilterPolicy: { "X-CARDATA-EVENT_TYPE": [ "CARDATA-Insights.Battery.Model.SEND" ] }
-
-  ## END OF QUEUE FOR BATTERY MODEL OUTPUT
-
-  ## QUEUE FOR PUSH NOTIFICATION TOKEN
-
-  PushNotificationDeviceTokenQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      RedrivePolicy:
-        deadLetterTargetArn:
-          Fn::GetAtt:
-            - "PushNotificationDeviceTokenDLQueue"
-            - "Arn"
-        maxReceiveCount: 5
-
-  PushNotificationDeviceTokenQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      PolicyDocument:
-        Statement:
-          - Effect: Allow
-            Action:
-              - "sqs:SendMessage"
-              - "sqs:ReceiveMessage"
-              - "sqs:DeleteMessage"
-            Principal:
-              AWS: '*'
-            Resource: !GetAtt PushNotificationDeviceTokenQueue.Arn
-      Queues:
-        - !Ref PushNotificationDeviceTokenQueue
-
-  PushNotificationDeviceTokenDLQueue:
-    Type: AWS::SQS::Queue
-
-  PushNotificationDeviceTokenQueueSNSSubscription:
-    Type: AWS::SNS::Subscription
-    Properties:
-      Protocol: sqs
-      RawMessageDelivery: true
-      Endpoint: !GetAtt PushNotificationDeviceTokenQueue.Arn
-      TopicArn: !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:cardata-${ShortName}-${Env}-${EnvId}"
-      FilterPolicy: { "X-CARDATA-EVENT_TYPE": [ "CARDATA-Insights.PushNotification.DeviceToken.SEND" ] }
-
-  ## END OF QUEUE FOR PUSH NOTIFICATION TOKEN
-
   ServicePolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -198,59 +101,6 @@ Resources:
               - !GetAtt VehicleMemberAssociationTable.Arn
               - !GetAtt PushNotificationDeviceTokenQueue.Arn
               - !GetAtt BatteryModelInsightsQueue.Arn
-
-  DeviceTokenTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: True
-      SSESpecification:
-        SSEEnabled: true
-      AttributeDefinitions:
-        - AttributeName: membershipNumber
-          AttributeType: S
-        - AttributeName: deviceToken
-          AttributeType: S
-      KeySchema:
-        - AttributeName: membershipNumber
-          KeyType: HASH
-        - AttributeName: deviceToken
-          KeyType: RANGE
-      TimeToLiveSpecification:
-        AttributeName: ttl
-        Enabled: true
-
-
-  NotificationTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: True
-      SSESpecification:
-        SSEEnabled: true
-      AttributeDefinitions:
-        - AttributeName: NotificationId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: NotificationId
-          KeyType: HASH
-
-  VehicleMemberAssociationTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: True
-      SSESpecification:
-        SSEEnabled: true
-      AttributeDefinitions:
-        - AttributeName: VehicleId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: VehicleId
-          KeyType: HASH
 
   #######
   #
@@ -334,6 +184,12 @@ Resources:
           Environment:
             - Name: VERSION
               Value: !Ref Version
+            - Name: SPICEDB_DATASTORE_CONN_URI
+              Value: postgres://postgres:password@database-2.cluster-cbuvgyauszmh.us-east-1.rds.amazonaws.com:5432/spicedb?sslmode=disable
+            - Name: SPICEDB_DATASTORE_ENGINE
+              Value: postgres
+            - Name: SPICEDB_GRPC_PRESHARED_KEY
+              Value: test
           LogConfiguration:
             LogDriver: awslogs
             Options:
