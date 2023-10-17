@@ -12,7 +12,6 @@ phases:
   pre_build:
     commands:
       - echo Pre-Build Phase `date`
-      - ./gradlew clean build jacocoTestReport --configure-on-demand
   build:
     commands:
       - echo Build Phase `date`

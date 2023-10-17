@@ -5,22 +5,16 @@ proxy:
 phases:
   install:
     runtime-versions:
-      java: corretto8
+      golang: 1.20
     commands:
       - $(aws ecr get-login --region ${AWS_REGION} --no-include-email)
   pre_build:
     commands:
       - echo Pre-Build Phase `date`
-      - SHORTHASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | head -c8)
-      - VERSION="${RELEASE}-SNAPSHOT.${SHORTHASH}"
-      - echo version $VERSION
-      - aws cloudformation validate-template --template-body file://cloudformation/cloudformation.yml
   build:
     commands:
       - echo Build Phase `date`
-      - ./gradlew clean build jacocoTestReport --configure-on-demand
-      - PACKAGE=$(./gradlew printJar -q | tail -n 1)
-      - docker build --build-arg JAR_FILE=build/libs/$PACKAGE --build-arg REGISTRY=$REPO_URL -t $REPO_NAME:$VERSION .
+      - docker build -t $REPO_NAME:$VERSION .
   post_build:
     commands:
       - echo Post-Build Phase `date`
@@ -32,10 +26,3 @@ artifacts:
     - Overrides.json
     - cloudformation/*
   discard-paths: yes
-cache:
-  paths:
-    - '/root/.gradle/caches/**/*'
-    - '/root/.gradle/wrapper/**/*'
-    - '.gradle/**/*'
-    - '/root/.cache/**/*'
-    - '/var/cache/apt/archives/**/*'

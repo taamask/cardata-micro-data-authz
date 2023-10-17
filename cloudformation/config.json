@@ -1,7 +1,7 @@
 {
   "Parameters" : {
     "Platform": "cardata",
-    "ServiceName": "micro-data-insights"
+    "ServiceName": "micro-data-authz"
   },
   "StackPolicy" : {
     "Statement" : [
@@ -21,7 +21,7 @@
     "Description": "Service to test data ingestion with traccar",
     "Environment Owner": "tamas",
     "Platform": "cardata",
-    "ServiceName": "micro-data-insights",
+    "ServiceName": "micro-data-authz",
     "Shared": "YES",
     "Tower": "tamas"
   }

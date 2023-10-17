@@ -12,7 +12,7 @@
        "regressionTestPipelineName": ""
     },
     "commonConfig": {
-       "serviceName": "micro-data-insights",
+       "serviceName": "micro-data-authz",
        "platform": "cardata"
     }
  }
