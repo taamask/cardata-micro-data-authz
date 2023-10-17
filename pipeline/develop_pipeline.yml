@@ -1,0 +1,383 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Develop Pipeline
+Parameters:
+  Platform:
+    Type: String
+    Description: Platform
+    Default: "dip"
+  ServiceName:
+    Type: String
+    Description: Name of Service e.g. Project
+  PipelineBucket:
+    Type: String
+    Description: Name of bucket to use for the CodePipeline artifacts
+    Default: "pipelinebuckett"
+  BucketPrefix:
+    Type: String
+    Description: Name of bucket to use for the CodePipeline artifacts
+    Default: "cp"
+  GithubRepo:
+    Type: String
+    Description: Github Repo
+  CyclingSecret:
+    Type: String
+    Description: injected secret that should cycle on every deploy
+    NoEcho: true
+
+Resources:
+
+Resources:
+  # MySourceCreds:
+  #   Type: AWS::CodeBuild::SourceCredential
+  #   Properties: 
+  #     Token: '{{resolve:ssm:/GithubToken}}'
+  #     ServerType: GITHUB
+  #     AuthType: PERSONAL_ACCESS_TOKEN
+
+  CodePipelineCodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+              - codebuild.amazonaws.com
+              - codepipeline.amazonaws.com
+          Action:
+            - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: S3AndKMSAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:ListBucket
+            - s3:ListBucketMultipartUploads
+            - s3:AbortMultipartUpload
+            - s3:DeleteObject
+            - codebuild:*
+            - ec2:*
+            Resource: "*"
+              # - !GetAtt CodePipelineBucket.Arn
+              # - !Join [ "", [ !GetAtt CodePipelineBucket.Arn, "/*" ] ]
+          - Effect: Allow
+            Action:
+            - kms:Decrypt
+            - kms:GenerateDataKey
+            Resource:
+              - !GetAtt MyKmsKey.Arn
+
+  MyKmsKey:
+    Type: 'AWS::KMS::Key'
+    Properties:
+      Description: My KMS Key for S3 Encryption
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: key-policy
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: [!Sub "arn:aws:iam::${AWS::AccountId}:root", "arn:aws:iam::106316338446:role/user-access"]
+            Action: kms:*
+            Resource: '*'
+          - Sid: Allow S3 to use the key
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+            Resource: '*'
+          - Sid: Allow KMS to use the key
+            Effect: Allow
+            Principal:
+              Service: kms.amazonaws.com
+            Action:
+              - kms:Create*
+              - kms:Describe*
+              - kms:Enable*
+              - kms:List*
+              - kms:Put*
+              - kms:Update*
+              - kms:Revoke*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+            Resource: '*'
+
+  CodePipelineBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Join 
+        - '-'
+        - - !Ref BucketPrefix
+          - !Ref AWS::AccountId
+          - !Ref AWS::Region
+          - 'bucket'
+          - !Select 
+            - 0
+            - !Split 
+              - '-'
+              - !Select 
+                - 2
+                - !Split 
+                  - /
+                  - !Ref AWS::StackId
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              KMSMasterKeyID: !Ref MyKmsKey
+              SSEAlgorithm: aws:kms
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Join ["/", ["/aws/pipeline", !Ref "AWS::StackName" ]]
+      RetentionInDays: 7
+
+  Build:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${Platform}-${ServiceName}-develop
+      LogsConfig:
+        CloudWatchLogs:
+          Status:  ENABLED
+          GroupName:  !Ref LogGroup
+          StreamName:  build
+      EncryptionKey: !GetAtt MyKmsKey.Arn
+      Description: Build artifact from source
+      ServiceRole: !Ref CodePipelineCodeBuildRole
+      Cache:
+        Type: LOCAL
+        Modes:
+          - LOCAL_DOCKER_LAYER_CACHE
+          - LOCAL_SOURCE_CACHE
+          - LOCAL_CUSTOM_CACHE
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        PrivilegedMode: True
+        EnvironmentVariables:
+        - Name: REPO_NAME
+          Value: !Ref GithubRepo
+          Type: PLAINTEXT
+        - Name: REPO_URL
+          Value: /DockerUrl
+          Type: PARAMETER_STORE
+        - Name: RELEASE
+          Value: develop
+          Type: PLAINTEXT
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: pipeline/buildspec.yml
+      TimeoutInMinutes: 30
+      VpcConfig:
+        VpcId: !ImportValue VpcId
+        Subnets: [!ImportValue PrivateSubnetId]
+        SecurityGroupIds: [!ImportValue CodeBuildSecurityGroupId]
+      Tags:
+      - Key: Project
+        Value: !Sub ${Platform}-${ServiceName}
+    # DependsOn: MySourceCreds
+
+
+  PullRequest:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${Platform}-${ServiceName}-pullrequests
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Ref LogGroup
+          StreamName: pullrequest
+      BadgeEnabled: False
+      EncryptionKey: !GetAtt MyKmsKey.Arn
+      Description: SonarCloud Java Scan on PR
+      ServiceRole: !Ref CodePipelineCodeBuildRole
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        PrivilegedMode: False
+      Triggers:
+        Webhook: true
+        FilterGroups:
+        - - Type: EVENT
+            Pattern: PULL_REQUEST_CREATED,PULL_REQUEST_UPDATED
+          - Type: BASE_REF
+            Pattern: ^refs/heads/.*$
+            ExcludeMatchedPattern: false
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Cache:
+        Type: NO_CACHE
+      Source:
+        Type: GITHUB
+        Location: !Sub https://github.com/taamask/${GithubRepo}.git
+        BuildSpec: pipeline/buildspec_pr.yml
+        GitCloneDepth: 0 # 0 forces a full clone
+      TimeoutInMinutes: 30
+      VpcConfig:
+        VpcId: !ImportValue VpcId
+        Subnets: [!ImportValue PrivateSubnetId]
+        SecurityGroupIds: [!ImportValue CodeBuildSecurityGroupId]
+      Tags:
+      - Key: Project
+        Value: !Sub ${Platform}-${ServiceName}
+
+  Webhook:
+    Type: AWS::CodePipeline::Webhook
+    Properties:
+      AuthenticationConfiguration:
+        SecretToken: !Ref CyclingSecret
+      Filters:
+      - JsonPath: "$.ref"
+        MatchEquals: refs/heads/{Branch}
+      Authentication: GITHUB_HMAC
+      TargetPipeline: !Ref Pipeline
+      TargetAction: Source
+      Name: !Sub ${Platform}-${ServiceName}-develop
+      TargetPipelineVersion: !GetAtt Pipeline.Version
+      RegisterWithThirdParty: 'true'
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !GetAtt CodePipelineCodeBuildRole.Arn
+      Name: !Sub ${Platform}-${ServiceName}-develop
+      RestartExecutionOnUpdate: true
+      ArtifactStore:
+        Type: S3
+        EncryptionKey:
+          Id: !Ref MyKmsKey
+          Type: KMS
+        Location: !Ref CodePipelineBucket
+      Stages:
+
+      - Name: Source
+        Actions:
+        - Name: Source
+          InputArtifacts: []
+          OutputArtifacts:
+          - Name: Source
+          ActionTypeId:
+            Category: Source
+            Owner: ThirdParty
+            Version: '1'
+            Provider: GitHub
+          Configuration:
+              Owner: taamask
+              Repo: !Ref GithubRepo
+              Branch: develop
+              OAuthToken: '{{resolve:ssm:/GithubToken}}'
+              PollForSourceChanges: false
+          RunOrder: 1
+
+      - Name: Build
+        Actions:
+        - Name: Build
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          InputArtifacts:
+          - Name: Source
+          OutputArtifacts:
+          - Name: Deploy
+          Configuration:
+            ProjectName: !Ref Build
+          RunOrder: 1
+
+      - Name: CI
+        Actions:
+        - Name: ci-develop
+          ActionTypeId:
+            Owner: AWS
+            Category: Deploy
+            Version: 1
+            Provider: CloudFormation
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            RoleArn: !GetAtt CodePipelineCodeBuildRole.Arn
+            StackName: !Sub ${Platform}-${ServiceName}-ci-develop
+            Capabilities: CAPABILITY_IAM
+            TemplatePath: "Deploy::cloudformation.yml"
+            ParameterOverrides: |
+              {
+                "Version" : { "Fn::GetParam" : ["Deploy", "Overrides.json", "Version"]},
+                "Env": "ci",
+                "EnvId": "develop"
+              }
+            ChangeSetName: ci-develop
+          InputArtifacts:
+            - Name: Deploy
+          RunOrder: 2
+
+      - Name: QA
+        Actions:
+        - Name: qa-develop
+          ActionTypeId:
+            Owner: AWS
+            Category: Deploy
+            Version: 1
+            Provider: CloudFormation
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            RoleArn: !GetAtt CodePipelineCodeBuildRole.Arn
+            StackName: !Sub ${Platform}-${ServiceName}-qa-develop
+            Capabilities: CAPABILITY_IAM
+            TemplatePath: "Deploy::cloudformation.yml"
+            ParameterOverrides: |
+              {
+                "Version" : { "Fn::GetParam" : ["Deploy", "Overrides.json", "Version"]},
+                "Env": "qa",
+                "EnvId": "develop"
+              }
+            ChangeSetName: qa-develop
+          InputArtifacts:
+            - Name: Deploy
+          RunOrder: 2
+    
+        
+  # EventRule:
+  #   Type: AWS::Events::Rule
+  #   Properties:
+  #     Description: "EventRule"
+  #     EventPattern:
+  #       source:
+  #         - "aws.codepipeline"
+  #       detail-type:
+  #         - "CodePipeline Pipeline Execution State Change"
+  #       detail:
+  #         state:
+  #           - "FAILED"
+  #           - "SUCCEEDED"
+  #         pipeline:
+  #           - !Sub ${Platform}-${ServiceName}-develop
+  #     State: "ENABLED"
+  #     Targets:
+  #       -
+  #         Arn: !ImportValue dip-devops-pipeline-notification-SNSTopicARN
+  #         Id: "dip-devops-pipeline-notification-SNSTopicARN"

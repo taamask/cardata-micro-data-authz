@@ -1,0 +1,32 @@
+version: 0.2
+proxy:
+  upload-artifacts: no
+  logs: no
+phases:
+  install:
+    runtime-versions:
+      java: corretto8
+    commands:
+      - echo Install Phase `date`
+      - chmod 755 gradlew
+  pre_build:
+    commands:
+      - echo Pre-Build Phase `date`
+      - ./gradlew clean build jacocoTestReport --configure-on-demand
+  build:
+    commands:
+      - echo Build Phase `date`
+      - REPO_SLUG="$(echo $CODEBUILD_SOURCE_REPO_URL | sed 's/^.*github.com\///' | sed 's/\.git$//')"
+  post_build:
+    commands:
+      - echo Post-Build Phase `date`
+artifacts:
+  files:
+    - ""
+cache:
+  paths:
+    - '/root/.gradle/caches/**/*'
+    - '/root/.gradle/wrapper/**/*'
+    - '.gradle/**/*'
+    - '/root/.cache/**/*'
+    - '/var/cache/apt/archives/**/*'

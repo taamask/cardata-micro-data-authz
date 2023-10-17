@@ -1,0 +1,663 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECS Service
+Parameters:
+  Env:
+    Type: String
+    Description: Env
+    Default: ci
+  EnvId:
+    Type: String
+    Description: Env ID
+    Default: develop
+  ServiceName:
+    Type: String
+    Description: Service Name
+    Default: micro-data-insights
+  ShortName:
+    Type: String
+    Description: Short Name
+    Default: "micro-cvh-insights"
+  Platform:
+    Type: String
+    Description: Platform
+    Default: cardata
+  ImageUrl:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: Docker Image URL
+    Default: /DockerUrl
+  Version:
+    Type: String
+    Description: Version
+    Default: latest
+  CpuScalePercentage:
+    Type: String
+    Default: "80"
+  Cpu:
+    Type: String
+    Default: "512"
+  Memory:
+    Type: String
+    Default: "2048"
+  LogsDestination:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: Event Log Destination
+    Default: "/LogsDestination"
+  LogRetentionInDays:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: LogRetentionInDays
+    Default: "/LogRetentionInDays"
+  ServiceMinCount:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: ServiceMinCount
+    Default: "/ServiceMinCount"
+  ServiceMaxCount:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: ServiceMaxCount
+    Default: "/ServiceMaxCount"
+  MinimumHealthyPercent:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: MinimumHealthyPercent
+    Default: "/MinimumHealthyPercent"
+  MaximumPercent:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: MaximumPercent
+    Default: "/MaximumPercent"
+
+Conditions:
+  tamasDev: !Equals [ !Ref AWS::AccountId, "123456789123"]
+  tamasUat: !Equals [ !Ref AWS::AccountId, "123456789123"]
+
+Resources:
+  #######
+  #
+  # Service Specific Start
+  #
+  #######
+
+  SNSTopic:
+    Type: "AWS::SNS::Topic"
+    Properties:
+      TopicName: !Sub cardata-${ShortName}-${Env}-${EnvId}
+
+  SSMSNSTopic:
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      Description: SNS Topic
+      Name: !Sub /infrastructure-config/${ShortName}.${Env}-${EnvId}/SNSTopic
+      Type: String
+      Value: !Ref SNSTopic
+
+## QUEUE FOR BATTERY MODEL OUTPUT
+
+  BatteryModelInsightsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+            - "BatteryModelInsightsDLQueue"
+            - "Arn"
+        maxReceiveCount: 5
+
+  BatteryModelInsightsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action:
+              - "sqs:SendMessage"
+              - "sqs:ReceiveMessage"
+              - "sqs:DeleteMessage"
+            Principal:
+              AWS: '*'
+            Resource: !GetAtt BatteryModelInsightsQueue.Arn
+      Queues:
+        - !Ref BatteryModelInsightsQueue
+
+  BatteryModelInsightsDLQueue:
+    Type: AWS::SQS::Queue
+
+  BatteryModelInsightsQueueSNSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: sqs
+      RawMessageDelivery: true
+      Endpoint: !GetAtt BatteryModelInsightsQueue.Arn
+      TopicArn: !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:cardata-${ShortName}-${Env}-${EnvId}"
+      FilterPolicy: { "X-CARDATA-EVENT_TYPE": [ "CARDATA-Insights.Battery.Model.SEND" ] }
+
+  ## END OF QUEUE FOR BATTERY MODEL OUTPUT
+
+  ## QUEUE FOR PUSH NOTIFICATION TOKEN
+
+  PushNotificationDeviceTokenQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+            - "PushNotificationDeviceTokenDLQueue"
+            - "Arn"
+        maxReceiveCount: 5
+
+  PushNotificationDeviceTokenQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action:
+              - "sqs:SendMessage"
+              - "sqs:ReceiveMessage"
+              - "sqs:DeleteMessage"
+            Principal:
+              AWS: '*'
+            Resource: !GetAtt PushNotificationDeviceTokenQueue.Arn
+      Queues:
+        - !Ref PushNotificationDeviceTokenQueue
+
+  PushNotificationDeviceTokenDLQueue:
+    Type: AWS::SQS::Queue
+
+  PushNotificationDeviceTokenQueueSNSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: sqs
+      RawMessageDelivery: true
+      Endpoint: !GetAtt PushNotificationDeviceTokenQueue.Arn
+      TopicArn: !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:cardata-${ShortName}-${Env}-${EnvId}"
+      FilterPolicy: { "X-CARDATA-EVENT_TYPE": [ "CARDATA-Insights.PushNotification.DeviceToken.SEND" ] }
+
+  ## END OF QUEUE FOR PUSH NOTIFICATION TOKEN
+
+  ServicePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: "ServiceSpecificPolicy"
+      Roles:
+        - !Ref TaskRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: dynamodb
+            Effect: Allow
+            Action:
+              - "dynamodb:GetItem"
+              - "dynamodb:PutItem"
+              - "dynamodb:Query"
+              - "dynamodb:UpdateItem"
+              - "dynamodb:BatchWriteItem"
+              - "dynamodb:BatchGetItem"
+              - "dynamodb:DescribeTable"
+              - "sqs:ReceiveMessage"
+            Resource:
+              - !GetAtt DeviceTokenTable.Arn
+              - !GetAtt NotificationTable.Arn
+              - !GetAtt VehicleMemberAssociationTable.Arn
+              - !GetAtt PushNotificationDeviceTokenQueue.Arn
+              - !GetAtt BatteryModelInsightsQueue.Arn
+
+  DeviceTokenTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: True
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: membershipNumber
+          AttributeType: S
+        - AttributeName: deviceToken
+          AttributeType: S
+      KeySchema:
+        - AttributeName: membershipNumber
+          KeyType: HASH
+        - AttributeName: deviceToken
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+
+  NotificationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: True
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: NotificationId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: NotificationId
+          KeyType: HASH
+
+  VehicleMemberAssociationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: True
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: VehicleId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: VehicleId
+          KeyType: HASH
+
+  #######
+  #
+  # Service Specific End
+  #
+  #######
+
+  ServiceLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Join ["/", ["/aws/ecs", !Ref "AWS::StackName" ]]
+      RetentionInDays: !Ref LogRetentionInDays
+  ERRORMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref ServiceLogGroup
+      FilterPattern: "[timestamp, AppName, ClusterName, TraceId, SpanId, thread, level = ERROR, logger, message]"
+      MetricTransformations:
+        -
+          MetricValue: "1"
+          MetricNamespace: !Ref ServiceLogGroup
+          MetricName: "ERROR"
+  WARNMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref ServiceLogGroup
+      FilterPattern: "[timestamp, AppName, ClusterName, TraceId, SpanId, thread, level = WARN, logger, message]"
+      MetricTransformations:
+        -
+          MetricValue: "1"
+          MetricNamespace: !Ref ServiceLogGroup
+          MetricName: "WARN"
+  # ERRORAlarm:
+  #   Type: AWS::CloudWatch::Alarm
+  #   Properties:
+  #     AlarmDescription: High ERROR rate
+  #     Namespace: !Ref ServiceLogGroup
+  #     MetricName: ERROR
+  #     Statistic: Average
+  #     Period: '60'
+  #     EvaluationPeriods: '2'
+  #     ComparisonOperator: GreaterThanThreshold
+  #     Threshold: !Ref ServiceMinCount
+  #     Unit: Count
+  #     TreatMissingData: ignore
+  #     AlarmActions:
+  #       - !ImportValue AlertsSnsArn
+
+
+  # LogsDeliveryAlarm:
+  #   Type: AWS::CloudWatch::Alarm
+  #   Properties:
+  #     AlarmDescription: Logs Delivery Error
+  #     Namespace: AWS/Logs
+  #     MetricName: DeliveryErrors
+  #     Statistic: Sum
+  #     Period: '60'
+  #     EvaluationPeriods: '2'
+  #     ComparisonOperator: GreaterThanThreshold
+  #     Threshold: '1'
+  #     Unit: Count
+  #     TreatMissingData: ignore
+  #     Dimensions:
+  #       - Name: DestinationType
+  #         Value: Kinesis
+  #       - Name: LogGroupName
+  #         Value: !Ref ServiceLogGroup
+  #     #        - Name: FilterName
+  #     #          Value: !Ref ElasticsearchSubscription
+  #     AlarmActions:
+  #       - !ImportValue AlertsSnsArn
+
+  #  ElasticsearchSubscription:
+  #    Type: "AWS::Logs::SubscriptionFilter"
+  #    Properties:
+  #      DestinationArn: !Ref LogsDestination
+  #      FilterPattern: "{ $.eventType = * }"
+  #      LogGroupName: !Ref ServiceLogGroup
+
+
+
+  # ServiceDiscovery:
+  #   Type: AWS::ServiceDiscovery::Service
+  #   Properties:
+  #     Name: !Ref ServiceName
+  #     DnsConfig:
+  #       DnsRecords: [{Type: A, TTL: "10"}]
+  #       NamespaceId:
+  #         Fn::ImportValue:
+  #           !Sub ${Platform}-${Env}-${EnvId}-ecs-sd
+  #     HealthCheckCustomConfig:
+  #       FailureThreshold: 4
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: spring-cloud
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - autoscaling:Describe*
+                  - cloudformation:Describe*
+                  - cloudformation:List*
+                  - ssm:Get*
+                  - ssm:List*
+                Resource: '*'
+
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref AWS::StackName
+      Cpu: !Ref Cpu
+      Memory: !Ref Memory
+      TaskRoleArn: !Ref TaskRole
+      ExecutionRoleArn: arn:aws:iam::481543810001:role/cardata-micro-data-insigh-CodePipelineCodeBuildRole-HicpZCOW9f91
+      RequiresCompatibilities:
+        - FARGATE
+      NetworkMode: awsvpc
+      ContainerDefinitions:
+        - Name: !Ref ServiceName
+          Cpu: !Ref Cpu
+          Essential: 'true'
+          Image: !Sub ${ImageUrl}/${Platform}-${ServiceName}:${Version}
+          Memory: !Ref Memory
+          PortMappings:
+            - ContainerPort: 80
+            - ContainerPort: 81
+            - ContainerPort: 82
+          Environment:
+            - Name: VERSION
+              Value: !Ref Version
+            - Name: JAVA_TOOL_OPTIONS
+              Value: !Sub >-
+                -Xss1024m
+                -Xms25m
+                -Xmx1650m
+                -XX:MaxMetaspaceSize=210m
+                -XX:+UnlockExperimentalVMOptions
+                -XX:+UseCGroupMemoryLimitForHeap
+                -XX:MaxRAMFraction=1
+                -Dserver.port=80
+                -Dmanagement.server.port=82
+                -Dcom.sun.management.jmxremote=true
+                -Dcom.sun.management.jmxremote.authenticate=false
+                -Dcom.sun.management.jmxremote.local.only=false
+                -Dcom.sun.management.jmxremote.port=81
+                -Dcom.sun.management.jmxremote.ssl=false
+                -Dspring.profiles.active=${Env}-${EnvId}
+                -Dcloud.aws.region.static=${AWS::Region}
+                -Dcloud.aws.stack.name=${AWS::StackName}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Join ["/", ["/aws/ecs", !Ref "AWS::StackName" ]]
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: instance
+          HealthCheck:
+            Command: [ "CMD-SHELL", "curl -f http://localhost:82/actuator/health || exit 1" ]
+            Interval: 30
+            Retries: 3
+            StartPeriod: 60
+            Timeout: 5
+      Volumes: []
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: develop
+      DesiredCount: 1
+      DeploymentConfiguration:
+        MaximumPercent: 100
+        MinimumHealthyPercent: 80
+      TaskDefinition: !Ref TaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - sg-0062f76bc5c62455c
+          Subnets: 
+            - !ImportValue PrivateSubnetId
+      CapacityProviderStrategy:
+        !If
+        - tamasUat
+        -
+          - CapacityProvider: FARGATE
+            Weight: 1
+          - CapacityProvider: FARGATE_SPOT
+            Weight: 1
+        - !If
+          - tamasDev
+          -
+            - CapacityProvider: FARGATE
+              Weight: 1
+            - CapacityProvider: FARGATE_SPOT
+              Weight: 5
+          -
+            - CapacityProvider: FARGATE
+              Weight: 1
+
+  ScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - application-autoscaling.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        -
+          PolicyName: "root"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - "application-autoscaling:*"
+                  - "cloudwatch:PutMetricAlarm"
+                  - "cloudwatch:DescribeAlarms"
+                  - "cloudwatch:GetMetricStatistics"
+                  - "cloudwatch:SetAlarmState"
+                  - "cloudwatch:DeleteAlarms"
+                  - "ecs:DescribeServices"
+                  - "ecs:UpdateService"
+                Resource: "*"
+
+
+  ScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: !Ref ServiceMaxCount
+      MinCapacity: !Ref ServiceMinCount
+      ResourceId: !Join
+        - "/"
+        - - service
+          - develop
+          - !GetAtt Service.Name
+      RoleARN: !GetAtt ScalingRole.Arn
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+  ScaleUp:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: ParserPolicyUp
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref "ScalableTarget"
+      StepScalingPolicyConfiguration:
+        Cooldown: 60
+        MetricAggregationType: "Average"
+        AdjustmentType: "ChangeInCapacity"
+        StepAdjustments:
+          - MetricIntervalLowerBound: 0
+            MetricIntervalUpperBound: 100
+            ScalingAdjustment: 1
+          - MetricIntervalLowerBound: 100
+            ScalingAdjustment: 2
+  ScaleDown:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: ParserPolicyDown
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref "ScalableTarget"
+      StepScalingPolicyConfiguration:
+        Cooldown: 60
+        MetricAggregationType: "Average"
+        AdjustmentType: "ChangeInCapacity"
+        StepAdjustments:
+          - MetricIntervalUpperBound: -1
+            MetricIntervalLowerBound: -100
+            ScalingAdjustment: -1
+          - MetricIntervalUpperBound: -100
+            ScalingAdjustment: -2
+
+  # CPUAlarm:
+  #   Type: "AWS::CloudWatch::Alarm"
+  #   Properties:
+  #     AlarmName: !Sub ${Platform}-${Env}-${EnvId}-${ServiceName}-CPUScale
+  #     AlarmDescription: "Trigger scaling based on CPU"
+  #     Namespace: "AWS/ECS"
+  #     MetricName: "CPUUtilization"
+  #     ComparisonOperator: "GreaterThanThreshold"
+  #     Dimensions:
+  #       - Name: ClusterName
+  #         Value: !Sub ${Platform}-${Env}-${EnvId}-ecs
+  #       - Name: ServiceName
+  #         Value: !GetAtt Service.Name
+  #     EvaluationPeriods: 2
+  #     Period: 60
+  #     Statistic: 'Average'
+  #     Threshold: !Ref CpuScalePercentage
+  #     AlarmActions:
+  #       - !Ref "ScaleUp"
+  #       - !Ref "ScaleDown"
+  #       - !ImportValue AlertsSnsArn
+
+  #     OKActions:
+  #       - !Ref "ScaleUp"
+  #       - !Ref "ScaleDown"
+  #       - !ImportValue AlertsSnsArn
+
+  # MemoryAlarm:
+  #   Type: "AWS::CloudWatch::Alarm"
+  #   Properties:
+  #     AlarmName: !Sub ${Platform}-${Env}-${EnvId}-${ServiceName}-Memory
+  #     AlarmDescription: "MemoryAlarm"
+  #     Namespace: "AWS/ECS"
+  #     MetricName: "MemoryUtilization"
+  #     ComparisonOperator: "GreaterThanThreshold"
+  #     Dimensions:
+  #       - Name: ClusterName
+  #         Value: !Sub ${Platform}-${Env}-${EnvId}-ecs
+  #       - Name: ServiceName
+  #         Value: !GetAtt Service.Name
+  #     EvaluationPeriods: 2
+  #     Period: 60
+  #     Statistic: 'Average'
+  #     Threshold: 90
+  #     AlarmActions:
+  #       - !ImportValue AlertsSnsArn
+  #     OKActions:
+  #       - !ImportValue AlertsSnsArn
+
+  # ServiceCountAlarm:
+  #   Type: AWS::CloudWatch::Alarm
+  #   Properties:
+  #     AlarmName: !Sub ${Platform}-${Env}-${EnvId}-${ServiceName}-ServiceCount
+  #     AlarmDescription: Service Count
+  #     Namespace: AWS/ECS
+  #     MetricName: CPUUtilization
+  #     Statistic: SampleCount
+  #     Period: '60'
+  #     EvaluationPeriods: '2'
+  #     ComparisonOperator: LessThanThreshold
+  #     Threshold: !Ref ServiceMinCount
+  #     Dimensions:
+  #       - Name: ServiceName
+  #         Value: !GetAtt Service.Name
+  #       - Name: ClusterName
+  #         Value: !Sub ${Platform}-${Env}-${EnvId}-ecs
+  #     AlarmActions:
+  #       - !ImportValue AlertsSnsArn
+  #     OKActions:
+  #       - !ImportValue AlertsSnsArn
+
+
+
+  # SQSAlarm:
+  #   Type: "AWS::CloudWatch::Alarm"
+  #   Properties:
+  #     AlarmName: "SQSAlarm"
+  #     AlarmDescription: "Trigger scaling based on SQS queue"
+  #     Namespace: "AWS/SQS"
+  #     MetricName: "ApproximateNumberOfMessagesVisible"
+  #     ComparisonOperator: "GreaterThanThreshold"
+  #     Dimensions:
+  #       - Name: QueueName
+  #         Value: !Ref "sqsQueue"
+  #     EvaluationPeriods: 2
+  #     Period: 300
+  #     Statistic: 'Average'
+  #     Threshold: 1000
+  #     AlarmActions:
+  #       - !Ref "ScaleUp"
+  #       - !Ref "ScaleDown"
+  #     OKActions:
+  #       - !Ref "ScaleUp"
+  #       - !Ref "ScaleDown"
+
+  # AlarmScaleUp:
+  #   Type: AWS::CloudWatch::Alarm
+  #   Properties:
+  #     EvaluationPeriods: '1'
+  #     Statistic: Average
+  #     Threshold: '10'
+  #     AlarmDescription: Scale up Service.
+  #     Period: '60'
+  #     AlarmActions: [!Ref 'ServiceScalingPolicy']
+  #     Platform: AWS/ApplicationELB
+  #     Dimensions:
+  #       - Name: LoadBalancer
+  #         Value: !GetAtt
+  #           - ECSALB
+  #           - LoadBalancerFullName
+  #     ComparisonOperator: GreaterThanThreshold
+  #     MetricName: HTTPCode_ELB_5XX_Count
+
+
+Outputs:
+  Version:
+    Description: Version control
+    Value: !Ref Version

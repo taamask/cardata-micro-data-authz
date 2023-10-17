@@ -1,0 +1,18 @@
+{
+    "develop": {
+       "notificationSsmParameterName": "o1298j",
+       "regressionTestPipelineName": "8hy12"
+    },
+    "release": {
+       "notificationSsmParameterName": "d23oj9",
+       "regressionTestPipelineName": ""
+    },
+    "prod": {
+       "notificationSsmParameterName": "23oij2389",
+       "regressionTestPipelineName": ""
+    },
+    "commonConfig": {
+       "serviceName": "micro-data-insights",
+       "platform": "cardata"
+    }
+ }

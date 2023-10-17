@@ -1,0 +1,22 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Docker Repository
+Parameters:
+  Platform:
+    Type: String
+    Description: Platform
+    Default: "cardata"
+  ServiceName:
+    Type: String
+    Description: Name of Service e.g. Project
+  PromoteAccount:
+    Type: String
+    Description: Account to Promote to
+    Default: "UatAccount"
+Resources:
+  Repository:
+    Type: AWS::ECR::Repository
+    Properties: 
+      RepositoryName: !Sub ${Platform}-${ServiceName}
+      ImageScanningConfiguration: 
+        ScanOnPush: "true"

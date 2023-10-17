@@ -1,0 +1,28 @@
+{
+  "Parameters" : {
+    "Platform": "cardata",
+    "ServiceName": "micro-data-insights"
+  },
+  "StackPolicy" : {
+    "Statement" : [
+      {
+        "Effect" : "Allow",
+        "Action" : "Update:*",
+        "Principal": "*",
+        "Resource" : "*"
+      }
+    ]
+  },
+  "Tags" : {
+    "Application Name": "Service to test data ingestion with traccar",
+    "Application Role": "micro",
+    "Business Owner": "tamas",
+    "Cost Code": "c1",
+    "Description": "Service to test data ingestion with traccar",
+    "Environment Owner": "tamas",
+    "Platform": "cardata",
+    "ServiceName": "micro-data-insights",
+    "Shared": "YES",
+    "Tower": "tamas"
+  }
+}
