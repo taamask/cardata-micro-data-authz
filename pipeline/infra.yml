@@ -118,6 +118,72 @@ Resources:
           ToPort: 65535
           CidrIp: 0.0.0.0/0
 
+  ECSCluster:
+    Type: 'AWS::ECS::Cluster'
+    Properties:
+      ClusterName: develop
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      Configuration:
+        ExecuteCommandConfiguration:
+          Logging: DEFAULT
+      ServiceConnectDefaults:
+        Namespace: develop
+      Tags:
+        - Key: project
+          Value: project1
+  LogsDestinationParameter:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: LogsDestination
+      Type: String
+      Value: ecs
+      Description: Event Log Destination
+
+  LogRetentionInDaysParameter:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: LogRetentionInDays
+      Type: String
+      Value: 30
+      Description: LogRetentionInDays
+
+  ServiceMinCountParameter:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: ServiceMinCount
+      Type: String
+      Value: 2
+      Description: ServiceMinCount
+
+  ServiceMaxCountParameter:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: ServiceMaxCount
+      Type: String
+      Value: 10
+      Description: ServiceMaxCount
+
+  MinimumHealthyPercentParameter:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: MinimumHealthyPercent
+      Type: String
+      Value: 50
+      Description: MinimumHealthyPercent
+
+  MaximumPercentParameter:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: MaximumPercent
+      Type: String
+      Value: 100
+      Description: MaximumPercent
+
 Outputs:
   VpcId:
     Value: !Ref VPC
@@ -137,3 +203,8 @@ Outputs:
     Value: !Ref CodeBuildSecurityGroup
     Export:
       Name: CodeBuildSecurityGroupId
+  ECSCluster:
+    Description: The created cluster.
+    Value: !Ref ECSCluster
+    Export:
+      Name: ECSDevelopCluster

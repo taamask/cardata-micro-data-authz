@@ -13,6 +13,7 @@ phases:
       - echo Pre-Build Phase `date`
       - SHORTHASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | head -c8)
       - VERSION="${RELEASE}-SNAPSHOT.${SHORTHASH}"
+      - REPO_URL="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
       - echo version $VERSION
       - aws cloudformation validate-template --template-body file://cloudformation/cloudformation.yml
   build:

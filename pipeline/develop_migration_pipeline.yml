@@ -82,7 +82,7 @@ Resources:
           - Sid: Enable IAM User Permissions
             Effect: Allow
             Principal:
-              AWS: [!Sub "arn:aws:iam::${AWS::AccountId}:root", "arn:aws:iam::481543810001:role/user-access"]
+              AWS: [!Sub "arn:aws:iam::${AWS::AccountId}:root", "arn:aws:iam::${AWS::AccountId}:role/user-access"]
             Action: kms:*
             Resource: '*'
           - Sid: Allow S3 to use the key
