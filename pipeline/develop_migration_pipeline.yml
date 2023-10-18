@@ -215,7 +215,7 @@ Resources:
               commands:
                 - echo Build Phase `date`
                 - zed validate $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
-                - zed context set context ip-10-0-2-59.ec2.internal:50051 “test” --insecure
+                - zed context set con ip-10-0-2-59.ec2.internal:50051 "test" --insecure
                 - zed import $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
                 - docker pull 481543810001.dkr.ecr.us-east-1.amazonaws.com/cardata-micro-data-authz:latest
             post_build:
