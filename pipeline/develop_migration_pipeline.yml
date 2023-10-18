@@ -1,0 +1,314 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Develop Pipeline
+Parameters:
+  Platform:
+    Type: String
+    Description: Platform
+    Default: "dip"
+  ServiceName:
+    Type: String
+    Description: Name of Service e.g. Project
+  PipelineBucket:
+    Type: String
+    Description: Name of bucket to use for the CodePipeline artifacts
+    Default: "pipelinebuckett"
+  BucketPrefix:
+    Type: String
+    Description: Name of bucket to use for the CodePipeline artifacts
+    Default: "cp"
+  GithubRepo:
+    Type: String
+    Description: Github Repo
+  CyclingSecret:
+    Type: String
+    Description: injected secret that should cycle on every deploy
+    NoEcho: true
+
+Resources:
+
+Resources:
+  # MySourceCreds:
+  #   Type: AWS::CodeBuild::SourceCredential
+  #   Properties: 
+  #     Token: '{{resolve:ssm:/GithubToken}}'
+  #     ServerType: GITHUB
+  #     AuthType: PERSONAL_ACCESS_TOKEN
+
+  CodePipelineCodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+              - codebuild.amazonaws.com
+              - codepipeline.amazonaws.com
+          Action:
+            - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: S3AndKMSAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:ListBucket
+            - s3:ListBucketMultipartUploads
+            - s3:AbortMultipartUpload
+            - s3:DeleteObject
+            - codebuild:*
+            - ec2:*
+            Resource: "*"
+              # - !GetAtt CodePipelineBucket.Arn
+              # - !Join [ "", [ !GetAtt CodePipelineBucket.Arn, "/*" ] ]
+          - Effect: Allow
+            Action: "*"
+            Resource: "*"
+
+  MyKmsKey:
+    Type: 'AWS::KMS::Key'
+    Properties:
+      Description: My KMS Key for S3 Encryption
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: key-policy
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: [!Sub "arn:aws:iam::${AWS::AccountId}:root", "arn:aws:iam::481543810001:role/user-access"]
+            Action: kms:*
+            Resource: '*'
+          - Sid: Allow S3 to use the key
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+            Resource: '*'
+          - Sid: Allow KMS to use the key
+            Effect: Allow
+            Principal:
+              Service: kms.amazonaws.com
+            Action:
+              - kms:Create*
+              - kms:Describe*
+              - kms:Enable*
+              - kms:List*
+              - kms:Put*
+              - kms:Update*
+              - kms:Revoke*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+            Resource: '*'
+
+  CodePipelineBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Join 
+        - '-'
+        - - !Ref BucketPrefix
+          - !Ref AWS::AccountId
+          - !Ref AWS::Region
+          - 'bucket'
+          - !Select 
+            - 0
+            - !Split 
+              - '-'
+              - !Select 
+                - 2
+                - !Split 
+                  - /
+                  - !Ref AWS::StackId
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              KMSMasterKeyID: !Ref MyKmsKey
+              SSEAlgorithm: aws:kms
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Join ["/", ["/aws/pipeline", !Ref "AWS::StackName" ]]
+      RetentionInDays: 7
+
+  Build:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${Platform}-${ServiceName}-migration-develop
+      LogsConfig:
+        CloudWatchLogs:
+          Status:  ENABLED
+          GroupName:  !Ref LogGroup
+          StreamName:  build
+      EncryptionKey: !GetAtt MyKmsKey.Arn
+      Description: Build artifact from source
+      ServiceRole: !Ref CodePipelineCodeBuildRole
+      Cache:
+        Type: LOCAL
+        Modes:
+          - LOCAL_DOCKER_LAYER_CACHE
+          - LOCAL_SOURCE_CACHE
+          - LOCAL_CUSTOM_CACHE
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:5.0
+        PrivilegedMode: True
+        EnvironmentVariables:
+        - Name: REPO_URL
+          Value: 481543810001.dkr.ecr.us-east-1.amazonaws.com/cardata-micro-data-authz
+          Type: PLAINTEXT
+        - Name: RELEASE
+          Value: develop
+          Type: PLAINTEXT
+        - Name: AWS_REGION
+          Value: !Ref AWS::Region
+        - Name: AWS_ACCOUNT_ID
+          Value: !Ref AWS::AccountId
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          proxy:
+            upload-artifacts: no
+            logs: no
+          phases:
+            install:
+              runtime-versions:
+                golang: 1.20
+              commands:
+                - aws ecr get-login-password | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+            pre_build:
+              commands:
+                - echo Pre-Build Phase `date`
+                - cat imageDetail.json
+            build:
+              commands:
+                - echo Build Phase `date`
+                - docker pull 481543810001.dkr.ecr.us-east-1.amazonaws.com/cardata-micro-data-authz:latest
+            post_build:
+              commands:
+                - echo Post-Build Phase `date`
+          artifacts:
+            files:
+              - Overrides.json
+              - cloudformation/*
+            discard-paths: yes
+      TimeoutInMinutes: 30
+      VpcConfig:
+        VpcId: !ImportValue VpcId
+        Subnets: [!ImportValue PrivateSubnetId]
+        SecurityGroupIds: [!ImportValue CodeBuildSecurityGroupId]
+      Tags:
+      - Key: Project
+        Value: !Sub ${Platform}-${ServiceName}
+    # DependsOn: MySourceCreds
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !GetAtt CodePipelineCodeBuildRole.Arn
+      Name: !Sub ${Platform}-${ServiceName}-migration-develop
+      RestartExecutionOnUpdate: true
+      ArtifactStore:
+        Type: S3
+        EncryptionKey:
+          Id: !Ref MyKmsKey
+          Type: KMS
+        Location: !Ref CodePipelineBucket
+      Stages:
+
+      - Name: Source
+        Actions:
+        - Name: SourceGit
+          InputArtifacts: []
+          OutputArtifacts:
+          - Name: SourceArtifactGit
+          ActionTypeId:
+            Category: Source
+            Owner: ThirdParty
+            Version: '1'
+            Provider: GitHub
+          Configuration:
+              Owner: taamask
+              Repo: !Ref GithubRepo
+              Branch: develop
+              OAuthToken: '{{resolve:ssm:/GithubToken}}'
+              PollForSourceChanges: false
+          RunOrder: 1
+        - Name: Source
+          InputArtifacts: []
+          ActionTypeId:
+            Version: '1'
+            Owner: AWS
+            Category: Source
+            Provider: ECR
+          OutputArtifacts:
+            - Name: SourceArtifactECR
+          RunOrder: 1
+          Configuration:
+            ImageTag: latest
+            RepositoryName: cardata-micro-data-authz
+          Name: ImageSource
+
+      - Name: Build
+        Actions:
+        - Name: Build
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          InputArtifacts:
+          - Name: SourceArtifactECR
+          - Name: SourceArtifactGit
+          OutputArtifacts:
+          - Name: Deploy
+          Configuration:
+            ProjectName: !Ref Build
+            PrimarySource: SourceArtifactECR
+            # BatchEnabled: 'true'
+            # CombineArtifacts: true
+          RunOrder: 1
+        
+  # EventRule:
+  #   Type: AWS::Events::Rule
+  #   Properties:
+  #     Description: "EventRule"
+  #     EventPattern:
+  #       source:
+  #         - "aws.codepipeline"
+  #       detail-type:
+  #         - "CodePipeline Pipeline Execution State Change"
+  #       detail:
+  #         state:
+  #           - "FAILED"
+  #           - "SUCCEEDED"
+  #         pipeline:
+  #           - !Sub ${Platform}-${ServiceName}-develop
+  #     State: "ENABLED"
+  #     Targets:
+  #       -
+  #         Arn: !ImportValue dip-devops-pipeline-notification-SNSTopicARN
+  #         Id: "dip-devops-pipeline-notification-SNSTopicARN"
