@@ -207,7 +207,7 @@ Resources:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
           SecurityGroups:
-            - sg-0062f76bc5c62455c
+            - sg-0cb9d5d901777ccbd
           Subnets: 
             - !ImportValue PrivateSubnetId
       CapacityProviderStrategy:
