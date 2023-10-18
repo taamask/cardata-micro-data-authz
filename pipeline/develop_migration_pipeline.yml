@@ -204,6 +204,83 @@ Resources:
                 - echo Pre-Build Phase `date`
                 - cat $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
                 - cat imageDetail.json
+            build:
+              commands:
+                - echo Build Phase `date`
+                - image_uri=$(cat imageDetail.json | jq -r '.ImageURI' | cut -d'@' -f1)
+                - first_tag=$(cat imageDetail.json | jq -r '.ImageTags[0]')
+                - docker pull "${image_uri}:${first_tag}"
+            post_build:
+              commands:
+                - echo Post-Build Phase `date`
+                - docker run --entrypoint "spicedb" "${image_uri}:${first_tag}" migrate head --datastore-engine=postgres --datastore-conn-uri="postgres://postgres:password@ec2-54-225-181-18.compute-1.amazonaws.com:5432/spicedb?sslmode=disable"
+          artifacts:
+            files:
+              - $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
+            discard-paths: yes
+      TimeoutInMinutes: 30
+      VpcConfig:
+        VpcId: !ImportValue VpcId
+        Subnets: [!ImportValue PrivateSubnetId]
+        SecurityGroupIds: [!ImportValue CodeBuildSecurityGroupId]
+      Tags:
+      - Key: Project
+        Value: !Sub ${Platform}-${ServiceName}
+    # DependsOn: MySourceCreds
+
+  SchemaImportBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${Platform}-${ServiceName}-schema-develop
+      LogsConfig:
+        CloudWatchLogs:
+          Status:  ENABLED
+          GroupName:  !Ref LogGroup
+          StreamName:  build
+      EncryptionKey: !GetAtt MyKmsKey.Arn
+      Description: Build artifact from source
+      ServiceRole: !Ref CodePipelineCodeBuildRole
+      Cache:
+        Type: LOCAL
+        Modes:
+          - LOCAL_DOCKER_LAYER_CACHE
+          - LOCAL_SOURCE_CACHE
+          - LOCAL_CUSTOM_CACHE
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: True
+        EnvironmentVariables:
+        - Name: REPO_URL
+          Value: 481543810001.dkr.ecr.us-east-1.amazonaws.com/cardata-micro-data-authz
+          Type: PLAINTEXT
+        - Name: RELEASE
+          Value: develop
+          Type: PLAINTEXT
+        - Name: AWS_REGION
+          Value: !Ref AWS::Region
+        - Name: AWS_ACCOUNT_ID
+          Value: !Ref AWS::AccountId
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          proxy:
+            upload-artifacts: no
+            logs: no
+          phases:
+            install:
+              runtime-versions:
+                golang: 1.20
+              commands:
+            pre_build:
+              commands:
+                - echo Pre-Build Phase `date`
+                - cat $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
+                - cat imageDetail.json
                 - sudo apt update
                 - sudo apt-get install build-essential
                 - sudo apt install git -y
@@ -215,13 +292,10 @@ Resources:
               commands:
                 - echo Build Phase `date`
                 - zed validate $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
-                - zed context set con ip-10-0-2-59.ec2.internal:50051 "test" --insecure
-                - zed import $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
-                - docker pull 481543810001.dkr.ecr.us-east-1.amazonaws.com/cardata-micro-data-authz:latest
+                - zed import $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml --endpoint ip-10-0-2-59.ec2.internal:50051 --token test --insecure
             post_build:
               commands:
                 - echo Post-Build Phase `date`
-                - docker run --entrypoint "spicedb" 481543810001.dkr.ecr.us-east-1.amazonaws.com/cardata-micro-data-authz:latest migrate head --datastore-engine=postgres --datastore-conn-uri="postgres://postgres:password@ec2-54-225-181-18.compute-1.amazonaws.com:5432/spicedb?sslmode=disable"
           artifacts:
             files:
               - $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
@@ -283,6 +357,19 @@ Resources:
             RepositoryName: cardata-micro-data-authz
           Name: ImageSource
 
+      - Name: ApproveSpiceDbMigration
+        Actions:
+          - Name: ApproveSpiceDbMigration
+            ActionTypeId:
+              Category: Approval
+              Owner: AWS
+              Version: 1
+              Provider: Manual
+            InputArtifacts: []
+            OutputArtifacts: []
+            Configuration: {}
+            RunOrder: 2
+
       - Name: Build
         Actions:
         - Name: Build
@@ -295,13 +382,46 @@ Resources:
           - Name: SourceArtifactECR
           - Name: SourceArtifactGit
           OutputArtifacts:
-          - Name: Deploy
+          - Name: DeployMigration
           Configuration:
             ProjectName: !Ref Build
             PrimarySource: SourceArtifactECR
             # BatchEnabled: 'true'
             # CombineArtifacts: true
-          RunOrder: 1
+          RunOrder: 3
+
+      - Name: ApproveSpiceDbSchemaRelease
+        Actions:
+          - Name: ApproveSpiceDbSchemaRelease
+            ActionTypeId:
+              Category: Approval
+              Owner: AWS
+              Version: 1
+              Provider: Manual
+            InputArtifacts: []
+            OutputArtifacts: []
+            Configuration: {}
+            RunOrder: 4
+
+      - Name: SchemaImport
+        Actions:
+        - Name: SchemaImport
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          InputArtifacts:
+          - Name: SourceArtifactECR
+          - Name: SourceArtifactGit
+          OutputArtifacts:
+          - Name: DeploySchemaImport
+          Configuration:
+            ProjectName: !Ref SchemaImportBuild
+            PrimarySource: SourceArtifactECR
+            # BatchEnabled: 'true'
+            # CombineArtifacts: true
+          RunOrder: 5
         
   # EventRule:
   #   Type: AWS::Events::Rule
