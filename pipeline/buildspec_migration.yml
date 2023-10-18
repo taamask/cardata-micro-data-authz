@@ -11,18 +11,27 @@ phases:
   pre_build:
     commands:
       - echo Pre-Build Phase `date`
-      - cat $CODEBUILD_SRC_DIR_SourceArtifactGit/Dockerfile
+      - cat $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
       - cat imageDetail.json
+      - sudo apt update
+      - sudo apt-get install build-essential
+      - sudo apt install git -y
+      - /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+      - (echo; echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"') >> /home/$USER/.bashrc
+      - eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+      - brew install authzed/tap/zed
   build:
     commands:
       - echo Build Phase `date`
+      - zed validate $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
+      - zed context set context ip-10-0-2-59.ec2.internal:50051 “test” --insecure
+      - zed import $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
       - docker pull 481543810001.dkr.ecr.us-east-1.amazonaws.com/cardata-micro-data-authz:latest
   post_build:
     commands:
       - echo Post-Build Phase `date`
-      - docker run --rm -p 50051:50051 authzed/spicedb migrate head --datastore-engine=postgres --datastore-conn-uri="postgres://postgres:password@ec2-54-225-181-18.compute-1.amazonaws.com:5432/spicedb?sslmode=disable" --grpc-preshared-key "test"
+      - docker run --entrypoint "spicedb" 481543810001.dkr.ecr.us-east-1.amazonaws.com/cardata-micro-data-authz:latest migrate head --datastore-engine=postgres --datastore-conn-uri="postgres://postgres:password@ec2-54-225-181-18.compute-1.amazonaws.com:5432/spicedb?sslmode=disable"
 artifacts:
   files:
-    - Overrides.json
-    - cloudformation/*
+    - $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
   discard-paths: yes
