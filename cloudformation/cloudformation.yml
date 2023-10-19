@@ -151,6 +151,26 @@ Resources:
                   - ssm:List*
                 Resource: '*'
 
+  AdminRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: spring-cloud
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: '*'
+                Resource: '*'
+
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -158,7 +178,7 @@ Resources:
       Cpu: !Ref Cpu
       Memory: !Ref Memory
       TaskRoleArn: !Ref TaskRole
-      ExecutionRoleArn: arn:aws:iam::481543810001:role/cardata-micro-data-authz--CodePipelineCodeBuildRole-VUtzZFnG0Gzz
+      ExecutionRoleArn: !Ref AdminRole
       RequiresCompatibilities:
         - FARGATE
       NetworkMode: awsvpc
@@ -206,8 +226,7 @@ Resources:
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
-          SecurityGroups:
-            - sg-0cb9d5d901777ccbd
+          SecurityGroups: [!ImportValue CodeBuildSecurityGroupId]
           Subnets: 
             - !ImportValue PrivateSubnetId
       CapacityProviderStrategy:
