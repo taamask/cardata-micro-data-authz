@@ -5,12 +5,12 @@ Parameters:
   Platform:
     Type: String
     Description: Platform
-    Default: "cardata"
+    Default: "cardata" #Change this
   ServiceName:
     Type: String
     Description: Name of Service e.g. Project
   PromoteAccount:
-    Type: String
+    Type: String #Change this
     Description: Account to Promote to
     Default: "UatAccount"
 Resources:
@@ -20,3 +20,4 @@ Resources:
       RepositoryName: !Sub ${Platform}-${ServiceName}
       ImageScanningConfiguration: 
         ScanOnPush: "true"
+#Add RepositoryPolicyText

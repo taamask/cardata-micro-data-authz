@@ -22,6 +22,22 @@ Parameters:
     Type: String
     Description: Platform
     Default: cardata
+  SpiceDbHostname:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: The hostname of the Postgres database for SpiceDB
+    Default: "/SpiceDbHostname"
+  SpiceDbDatabaseName:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: The name of the database for SpiceDB
+    Default: "/SpiceDbDatabaseName"
+  SpiceDbPassword:
+    Type: String
+    Description: The password for SpiceDB
+    Default: '{{resolve:secretsmanager:spicedb/credentials:SecretString:postgres_spicedb_password}}'
+  SpiceDbUsername:
+    Type: String
+    Description: The password for SpiceDB
+    Default: '{{resolve:secretsmanager:spicedb/credentials:SecretString:postgres_spicedb_username}}'
   Version:
     Type: String
     Description: Version
@@ -195,7 +211,7 @@ Resources:
             - Name: VERSION
               Value: !Ref Version
             - Name: SPICEDB_DATASTORE_CONN_URI
-              Value: postgres://postgres:password@db-postgres.cluster-cbuvgyauszmh.us-east-1.rds.amazonaws.com:5432/spicedb?sslmode=disable
+              Value: !Sub postgres://${SpiceDbUsername}:${SpiceDbPassword}@${SpiceDbHostname}:5432/${SpiceDbDatabaseName}?sslmode=disable
             - Name: SPICEDB_DATASTORE_ENGINE
               Value: postgres
             - Name: SPICEDB_GRPC_PRESHARED_KEY

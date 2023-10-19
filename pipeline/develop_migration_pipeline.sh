@@ -8,10 +8,11 @@ if [ -z $(which jq) ]; then echo "JQ not installed" && break; else echo "All dep
 SERVICE_NAME=`cat pipeline_config.json | jq -r '.commonConfig.serviceName'`
 PLATFORM=`cat pipeline_config.json | jq -r '.commonConfig.platform'`
 
-export AWS_DEFAULT_PROFILE=default
+export AWS_DEFAULT_PROFILE=default #Change this
 
 ACCOUNT_ID=`aws sts get-caller-identity --query "Account" --output text`
 
+#Add role
 aws \
 cloudformation \
 deploy \

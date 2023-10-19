@@ -9,10 +9,12 @@ Parameters:
   ServiceName:
     Type: String
     Description: Name of Service e.g. Project
+    # Use aa bucket from SSM parameter
   PipelineBucket:
     Type: String
     Description: Name of bucket to use for the CodePipeline artifacts
     Default: "pipelinebuckett"
+    # Delete BucketPrefix
   BucketPrefix:
     Type: String
     Description: Name of bucket to use for the CodePipeline artifacts
@@ -25,9 +27,10 @@ Parameters:
     Description: injected secret that should cycle on every deploy
     NoEcho: true
 
-Resources:
+# Resources:
 
 Resources:
+# Can be deleted and use aa access token
   CodeBuildSourceCredential:
     Type: AWS::CodeBuild::SourceCredential
     Properties:
@@ -35,6 +38,7 @@ Resources:
       ServerType: GITHUB
       Token: '{{resolve:ssm:/GithubToken}}'
 
+# Can be deleted and use aa role
   CodePipelineCodeBuildRole:
     Type: AWS::IAM::Role
     Properties:
@@ -76,7 +80,7 @@ Resources:
           - Effect: Allow
             Action: "*"
             Resource: "*"
-
+# Can be deleted and use aa kms key
   MyKmsKey:
     Type: 'AWS::KMS::Key'
     Properties:
@@ -119,7 +123,7 @@ Resources:
               - kms:ScheduleKeyDeletion
               - kms:CancelKeyDeletion
             Resource: '*'
-
+# Can be deleted
   CodePipelineBucket:
     Type: 'AWS::S3::Bucket'
     Properties:
@@ -148,6 +152,7 @@ Resources:
           - ServerSideEncryptionByDefault:
               KMSMasterKeyID: !Ref MyKmsKey
               SSEAlgorithm: aws:kms
+#Until this can be deleted
 
   LogGroup:
     Type: AWS::Logs::LogGroup
@@ -165,9 +170,9 @@ Resources:
           Status:  ENABLED
           GroupName:  !Ref LogGroup
           StreamName:  build
-      EncryptionKey: !GetAtt MyKmsKey.Arn
+      EncryptionKey: !GetAtt MyKmsKey.Arn #Change this
       Description: Build artifact from source
-      ServiceRole: !Ref CodePipelineCodeBuildRole
+      ServiceRole: !Ref CodePipelineCodeBuildRole #Change this
       Cache:
         Type: LOCAL
         Modes:
@@ -185,9 +190,11 @@ Resources:
         - Name: REPO_NAME
           Value: !Ref GithubRepo
           Type: PLAINTEXT
+          #Add here REPO_URL
         - Name: RELEASE
           Value: develop
           Type: PLAINTEXT
+          # ADD PROXY
         - Name: AWS_REGION
           Value: !Ref AWS::Region
         - Name: AWS_ACCOUNT_ID
@@ -198,8 +205,8 @@ Resources:
       TimeoutInMinutes: 30
       VpcConfig:
         VpcId: !ImportValue VpcId
-        Subnets: [!ImportValue PrivateSubnetId]
-        SecurityGroupIds: [!ImportValue CodeBuildSecurityGroupId]
+        Subnets: [!ImportValue PrivateSubnetId] #Change this
+        SecurityGroupIds: [!ImportValue CodeBuildSecurityGroupId] #Change this
       Tags:
       - Key: Project
         Value: !Sub ${Platform}-${ServiceName}
@@ -216,9 +223,9 @@ Resources:
           GroupName: !Ref LogGroup
           StreamName: pullrequest
       BadgeEnabled: False
-      EncryptionKey: !GetAtt MyKmsKey.Arn
+      EncryptionKey: !GetAtt MyKmsKey.Arn #Change this
       Description: SonarCloud Java Scan on PR
-      ServiceRole: !Ref CodePipelineCodeBuildRole
+      ServiceRole: !Ref CodePipelineCodeBuildRole #Change this
       Environment:
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_SMALL
@@ -237,18 +244,20 @@ Resources:
       Cache:
         Type: NO_CACHE
       Source:
+      #Can be removed begin
         Auth:
           Resource: !Ref CodeBuildSourceCredential
           Type: OAUTH
+      #Can be removed end
         Type: GITHUB
-        Location: !Sub https://github.com/taamask/${GithubRepo}.git
+        Location: !Sub https://github.com/taamask/${GithubRepo}.git #Change this
         BuildSpec: pipeline/buildspec_pr.yml
         GitCloneDepth: 0 # 0 forces a full clone
       TimeoutInMinutes: 30
       VpcConfig:
         VpcId: !ImportValue VpcId
-        Subnets: [!ImportValue PrivateSubnetId]
-        SecurityGroupIds: [!ImportValue CodeBuildSecurityGroupId]
+        Subnets: [!ImportValue PrivateSubnetId] #Change this
+        SecurityGroupIds: [!ImportValue CodeBuildSecurityGroupId] #Change this
       Tags:
       - Key: Project
         Value: !Sub ${Platform}-${ServiceName}
@@ -271,15 +280,15 @@ Resources:
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
-      RoleArn: !GetAtt CodePipelineCodeBuildRole.Arn
+      RoleArn: !GetAtt CodePipelineCodeBuildRole.Arn #Change this
       Name: !Sub ${Platform}-${ServiceName}-develop
       RestartExecutionOnUpdate: true
       ArtifactStore:
         Type: S3
         EncryptionKey:
-          Id: !Ref MyKmsKey
+          Id: !Ref MyKmsKey #Change this
           Type: KMS
-        Location: !Ref CodePipelineBucket
+        Location: !Ref CodePipelineBucket #Change this
       Stages:
 
       - Name: Source
@@ -294,10 +303,10 @@ Resources:
             Version: '1'
             Provider: GitHub
           Configuration:
-              Owner: taamask
+              Owner: taamask #Change this
               Repo: !Ref GithubRepo
               Branch: develop
-              OAuthToken: '{{resolve:ssm:/GithubToken}}'
+              OAuthToken: '{{resolve:ssm:/GithubToken}}' #Change this
               PollForSourceChanges: false
           RunOrder: 1
 
@@ -319,6 +328,7 @@ Resources:
 
       - Name: CI
         Actions:
+        #Add CI Image scan and other functions from original file
         - Name: ci-develop
           ActionTypeId:
             Owner: AWS
@@ -327,9 +337,10 @@ Resources:
             Provider: CloudFormation
           Configuration:
             ActionMode: CREATE_UPDATE
-            RoleArn: !GetAtt CodePipelineCodeBuildRole.Arn
+            RoleArn: !GetAtt CodePipelineCodeBuildRole.Arn #Change this
             StackName: !Sub ${Platform}-${ServiceName}-ci-develop
             Capabilities: CAPABILITY_IAM
+            #Add TemplateConfiguration
             TemplatePath: "Deploy::cloudformation.yml"
             ParameterOverrides: |
               {
@@ -340,10 +351,12 @@ Resources:
             ChangeSetName: ci-develop
           InputArtifacts:
             - Name: Deploy
+            # Add CICloudFormationConfig
           RunOrder: 2
 
       - Name: QA
         Actions:
+        #Add functions from original file
         - Name: qa-develop
           ActionTypeId:
             Owner: AWS
@@ -352,9 +365,10 @@ Resources:
             Provider: CloudFormation
           Configuration:
             ActionMode: CREATE_UPDATE
-            RoleArn: !GetAtt CodePipelineCodeBuildRole.Arn
+            RoleArn: !GetAtt CodePipelineCodeBuildRole.Arn #Change this
             StackName: !Sub ${Platform}-${ServiceName}-qa-develop
             Capabilities: CAPABILITY_IAM
+            #Add TemplateConfiguration
             TemplatePath: "Deploy::cloudformation.yml"
             ParameterOverrides: |
               {
@@ -365,9 +379,10 @@ Resources:
             ChangeSetName: qa-develop
           InputArtifacts:
             - Name: Deploy
+            # Add QACloudFormationConfig
           RunOrder: 2
     
-        
+ # Add testautomation and EventRule       
   # EventRule:
   #   Type: AWS::Events::Rule
   #   Properties:

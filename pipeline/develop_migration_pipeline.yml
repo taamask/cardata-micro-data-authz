@@ -10,9 +10,22 @@ Parameters:
     Type: String
     Description: Name of Service e.g. Project
   PipelineBucket:
-    Type: String
+    Type: String #Change this
     Description: Name of bucket to use for the CodePipeline artifacts
     Default: "pipelinebuckett"
+  SpiceDbHostname:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: The hostname of the Postgres database for SpiceDB
+    Default: "/SpiceDbHostname"
+  SpiceDbDatabaseName:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: The name of the database for SpiceDB
+    Default: "/SpiceDbDatabaseName"
+  SpiceDbServiceAddress:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: The SpiceDB backend service address
+    Default: "/SpiceDbServiceAddress"
+# Delete BucketPrefix
   BucketPrefix:
     Type: String
     Description: Name of bucket to use for the CodePipeline artifacts
@@ -25,7 +38,7 @@ Parameters:
     Description: injected secret that should cycle on every deploy
     NoEcho: true
 
-Resources:
+# Resources:
 
 Resources:
   # MySourceCreds:
@@ -35,6 +48,7 @@ Resources:
   #     ServerType: GITHUB
   #     AuthType: PERSONAL_ACCESS_TOKEN
 
+#Delete CodePipelineCodeBuildRole
   CodePipelineCodeBuildRole:
     Type: AWS::IAM::Role
     Properties:
@@ -70,7 +84,7 @@ Resources:
           - Effect: Allow
             Action: "*"
             Resource: "*"
-
+# Delete MyKmsKey
   MyKmsKey:
     Type: 'AWS::KMS::Key'
     Properties:
@@ -113,7 +127,7 @@ Resources:
               - kms:ScheduleKeyDeletion
               - kms:CancelKeyDeletion
             Resource: '*'
-
+#Delete CodePipelineBucket
   CodePipelineBucket:
     Type: 'AWS::S3::Bucket'
     Properties:
@@ -159,9 +173,9 @@ Resources:
           Status:  ENABLED
           GroupName:  !Ref LogGroup
           StreamName:  build
-      EncryptionKey: !GetAtt MyKmsKey.Arn
+      EncryptionKey: !GetAtt MyKmsKey.Arn #Change this
       Description: Build artifact from source
-      ServiceRole: !Ref CodePipelineCodeBuildRole
+      ServiceRole: !Ref CodePipelineCodeBuildRole #Change this
       Cache:
         Type: LOCAL
         Modes:
@@ -177,17 +191,31 @@ Resources:
         PrivilegedMode: True
         EnvironmentVariables:
         - Name: REPO_URL
-          Value: 481543810001.dkr.ecr.us-east-1.amazonaws.com/cardata-micro-data-authz
+          Value: 481543810001.dkr.ecr.us-east-1.amazonaws.com/cardata-micro-data-authz # Change this
           Type: PLAINTEXT
         - Name: RELEASE
           Value: develop
           Type: PLAINTEXT
+        - Name: SPICEDB_USERNAME
+          Value: '{{resolve:secretsmanager:spicedb/credentials:SecretString:postgres_spicedb_username}}'
+          Type: PLAINTEXT
+        - Name: SPICEDB_HOSTNAME
+          Value: !Ref SpiceDbHostname
+          Type: PLAINTEXT
+        - Name: SPICEDB_DATABASE_NAME
+          Value: !Ref SpiceDbDatabaseName
+          Type: PLAINTEXT
+        - Name: SPICEDB_PASSWORD
+          Value: '{{resolve:secretsmanager:spicedb/credentials:SecretString:postgres_spicedb_password}}'
+          Type: PLAINTEXT
+      #Add Proxy
         - Name: AWS_REGION
           Value: !Ref AWS::Region
         - Name: AWS_ACCOUNT_ID
           Value: !Ref AWS::AccountId
       Source:
         Type: CODEPIPELINE
+# CHANGE ConnectionString
         BuildSpec: |
           version: 0.2
           proxy:
@@ -213,7 +241,7 @@ Resources:
             post_build:
               commands:
                 - echo Post-Build Phase `date`
-                - docker run --entrypoint "spicedb" "${image_uri}:${first_tag}" migrate head --datastore-engine=postgres --datastore-conn-uri="postgres://postgres:password@db-postgres.cluster-cbuvgyauszmh.us-east-1.rds.amazonaws.com:5432/spicedb?sslmode=disable"
+                - docker run --entrypoint "spicedb" "${image_uri}:${first_tag}" migrate head --datastore-engine=postgres --datastore-conn-uri="postgres://${SPICEDB_USERNAME}:${SPICEDB_PASSWORD}@${SPICEDB_HOSTNAME}:5432/${SPICEDB_DATABASE_NAME}?sslmode=disable"
           artifacts:
             files:
               - $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
@@ -221,8 +249,8 @@ Resources:
       TimeoutInMinutes: 30
       VpcConfig:
         VpcId: !ImportValue VpcId
-        Subnets: [!ImportValue PrivateSubnetId]
-        SecurityGroupIds: [!ImportValue CodeBuildSecurityGroupId]
+        Subnets: [!ImportValue PrivateSubnetId] #Change this
+        SecurityGroupIds: [!ImportValue CodeBuildSecurityGroupId] #Change this
       Tags:
       - Key: Project
         Value: !Sub ${Platform}-${ServiceName}
@@ -236,10 +264,11 @@ Resources:
         CloudWatchLogs:
           Status:  ENABLED
           GroupName:  !Ref LogGroup
+          #Add better name for StreamName
           StreamName:  build
-      EncryptionKey: !GetAtt MyKmsKey.Arn
-      Description: Build artifact from source
-      ServiceRole: !Ref CodePipelineCodeBuildRole
+      EncryptionKey: !GetAtt MyKmsKey.Arn #Change this
+      Description: Build artifact from source #Make this better
+      ServiceRole: !Ref CodePipelineCodeBuildRole #Change this
       Cache:
         Type: LOCAL
         Modes:
@@ -254,11 +283,18 @@ Resources:
         Image: aws/codebuild/standard:7.0
         PrivilegedMode: True
         EnvironmentVariables:
+        #Remove REPO_URL
         - Name: REPO_URL
           Value: 481543810001.dkr.ecr.us-east-1.amazonaws.com/cardata-micro-data-authz
           Type: PLAINTEXT
         - Name: RELEASE
           Value: develop
+          Type: PLAINTEXT
+        - Name: SPICEDB_SERVICE_ADDRESS
+          Value: !Ref SpiceDbServiceAddress
+          Type: PLAINTEXT
+        - Name: SPICEDB_TOKEN
+          Value: '{{resolve:secretsmanager:spicedb/credentials:SecretString:spicedb_token}}'
           Type: PLAINTEXT
         - Name: AWS_REGION
           Value: !Ref AWS::Region
@@ -266,6 +302,7 @@ Resources:
           Value: !Ref AWS::AccountId
       Source:
         Type: CODEPIPELINE
+        #Change in buildspex the IP endpoint and token
         BuildSpec: |
           version: 0.2
           proxy:
@@ -292,7 +329,7 @@ Resources:
               commands:
                 - echo Build Phase `date`
                 - zed validate $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml
-                - zed import $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml --endpoint ip-10-0-2-59.ec2.internal:50051 --token test --insecure
+                - zed import $CODEBUILD_SRC_DIR_SourceArtifactGit/schema/authzed-schema.yaml --endpoint "${SPICEDB_SERVICE_ADDRESS}:50051" --token "${SPICEDB_TOKEN}" --insecure
             post_build:
               commands:
                 - echo Post-Build Phase `date`
@@ -303,8 +340,8 @@ Resources:
       TimeoutInMinutes: 30
       VpcConfig:
         VpcId: !ImportValue VpcId
-        Subnets: [!ImportValue PrivateSubnetId]
-        SecurityGroupIds: [!ImportValue CodeBuildSecurityGroupId]
+        Subnets: [!ImportValue PrivateSubnetId] #Change this
+        SecurityGroupIds: [!ImportValue CodeBuildSecurityGroupId] #Change this
       Tags:
       - Key: Project
         Value: !Sub ${Platform}-${ServiceName}
@@ -313,15 +350,15 @@ Resources:
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
-      RoleArn: !GetAtt CodePipelineCodeBuildRole.Arn
-      Name: !Sub ${Platform}-${ServiceName}-migration-develop
+      RoleArn: !GetAtt CodePipelineCodeBuildRole.Arn #Change this
+      Name: !Sub ${Platform}-${ServiceName}-migration-develop 
       RestartExecutionOnUpdate: true
       ArtifactStore:
         Type: S3
         EncryptionKey:
-          Id: !Ref MyKmsKey
+          Id: !Ref MyKmsKey #Change this
           Type: KMS
-        Location: !Ref CodePipelineBucket
+        Location: !Ref CodePipelineBucket #Change this
       Stages:
 
       - Name: Source
@@ -336,10 +373,10 @@ Resources:
             Version: '1'
             Provider: GitHub
           Configuration:
-              Owner: taamask
+              Owner: taamask #Change this
               Repo: !Ref GithubRepo
               Branch: develop
-              OAuthToken: '{{resolve:ssm:/GithubToken}}'
+              OAuthToken: '{{resolve:ssm:/GithubToken}}' #Change this
               PollForSourceChanges: false
           RunOrder: 1
         - Name: Source
@@ -354,7 +391,7 @@ Resources:
           RunOrder: 1
           Configuration:
             ImageTag: latest
-            RepositoryName: cardata-micro-data-authz
+            RepositoryName: cardata-micro-data-authz #Change this
           Name: ImageSource
 
       - Name: ApproveSpiceDbMigration
@@ -422,7 +459,8 @@ Resources:
             # BatchEnabled: 'true'
             # CombineArtifacts: true
           RunOrder: 5
-        
+
+
   # EventRule:
   #   Type: AWS::Events::Rule
   #   Properties:
