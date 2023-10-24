@@ -1,23 +1,23 @@
 schema: |-
-  definition user {
-  	relation partner: partner
+  definition fvh/user {
+  	relation partner: fvh/partner
   }
 
-  definition organization_fqdn {}
+  definition fvh/organization_fqdn {}
 
   caveat is_in_organization_fqdn(organization_fqdn string, user_fqdn string) {
   	user_fqdn == organization_fqdn
   }
 
-  definition organization_role {
-      relation role_organization: organization
-      relation member: user
+  definition fvh/organization_role {
+      relation role_organization: fvh/organization
+      relation member: fvh/user
   }
 
-  definition organization {
-  	relation platform_admin: organization_role#member with is_in_organization_fqdn
-  	relation platform_support: organization_role#member
-  	relation account_manager: organization_role#member
+  definition fvh/organization {
+  	relation platform_admin: fvh/organization_role#member with is_in_organization_fqdn
+  	relation platform_support: fvh/organization_role#member
+  	relation account_manager: fvh/organization_role#member
 
   	permission can_create_platform_user = platform_admin
   	permission can_create_partner = platform_admin + account_manager
@@ -36,12 +36,12 @@ schema: |-
   	//permission can_create_product = platform_admin
   }
 
-  definition partner {
-  	relation parent_organization: organization
-  	relation partner_user: user
-  	relation partner_admin: user
-  	relation api_key_manager: user
-  	relation dashboard_user: user
+  definition fvh/partner {
+  	relation parent_organization: fvh/organization
+  	relation partner_user: fvh/user
+  	relation partner_admin: fvh/user
+  	relation api_key_manager: fvh/user
+  	relation dashboard_user: fvh/user
 
 
   	//Technical/calculated relations
@@ -105,10 +105,10 @@ schema: |-
   	permission can_revoke_subscription = synthetic_relation_platform_admin + account_manager
   }
 
-  definition subfleet {
-  	relation owner: partner
-  	relation parent_subfleet: subfleet
-  	relation subfleet_member: user
+  definition fvh/subfleet {
+  	relation owner: fvh/partner
+  	relation parent_subfleet: fvh/subfleet
+  	relation subfleet_member: fvh/user
 
   	permission synthetic_relation_platform_admin = owner->synthetic_relation_platform_admin
   	permission synthetic_relation_partner_admin = owner->partner_admin
@@ -127,15 +127,15 @@ schema: |-
   }
 
   //The following definitions are serving the purpose to check whether a specific endpoint can be called with the user's partner's purchased product
-  definition subscription {
-  	relation subscriber: partner
+  definition fvh/subscription {
+  	relation subscriber: fvh/partner
 
   	permission synthetic_relation_partner_user = subscriber->partner_user
   }
 
-  definition product {
-  	relation parent_organization: organization
-  	relation associated_subscription: subscription
+  definition fvh/product {
+  	relation parent_organization: fvh/organization
+  	relation associated_subscription: fvh/subscription
   	//relation api_controller_method: api_controller_method
 
   	permission synthetic_relation_partner_user = associated_subscription->synthetic_relation_partner_user
@@ -146,119 +146,170 @@ schema: |-
   // definition api_controller_method {}
 relationships: |-
   // set up organization roles
-  organization_role:platform_admin#role_organization@organization:thebb
-  organization_role:account_manager#role_organization@organization:thebb
-  organization_role:platform_support#role_organization@organization:thebb
+  fvh/organization_role:platform_admin#role_organization@fvh/organization:thebb
+  fvh/organization_role:account_manager#role_organization@fvh/organization:thebb
+  fvh/organization_role:platform_support#role_organization@fvh/organization:thebb
 
   // set up organization's role relations
-  organization:thebb#platform_admin@organization_role:platform_admin#member[is_in_organization_fqdn:{"organization_fqdn":"thebb.com"}]
-  organization:thebb#account_manager@organization_role:account_manager#member
-  organization:thebb#platform_support@organization_role:platform_support#member
+  fvh/organization:thebb#platform_admin@fvh/organization_role:platform_admin#member[is_in_organization_fqdn:{"organization_fqdn":"thebb.com"}]
+  fvh/organization:thebb#account_manager@fvh/organization_role:account_manager#member
+  fvh/organization:thebb#platform_support@fvh/organization_role:platform_support#member
 
   // set up the organization's platform admins
-  organization_role:platform_admin#member@user:tomi
+  fvh/organization_role:platform_admin#member@fvh/user:tomi
 
   // set up the organization's account managers
-  organization_role:account_manager#member@user:ben
-  organization_role:account_manager#member@user:claire
+  fvh/organization_role:account_manager#member@fvh/user:ben
+  fvh/organization_role:account_manager#member@fvh/user:claire
 
   // set up partners
-  partner:dhl#parent_organization@organization:thebb
-  partner:wizz#parent_organization@organization:thebb
+  fvh/partner:dhl#parent_organization@fvh/organization:thebb
+  fvh/partner:wizz#parent_organization@fvh/organization:thebb
 
   // assign account managers to their partners
-  partner:dhl#partner_user@user:ben
-  partner:wizz#partner_user@user:claire
+  fvh/partner:dhl#partner_user@fvh/user:ben
+  fvh/partner:wizz#partner_user@fvh/user:claire
 
   // set up partner users
-  partner:dhl#partner_user@user:marika
-  partner:dhl#partner_user@user:feri
-  partner:dhl#partner_user@user:mate
-  partner:dhl#partner_user@user:bela
-  partner:dhl#partner_user@user:neo
-  partner:fedex#partner_user@user:adi
+  fvh/partner:dhl#partner_user@fvh/user:marika
+  fvh/partner:dhl#partner_user@fvh/user:feri
+  fvh/partner:dhl#partner_user@fvh/user:mate
+  fvh/partner:dhl#partner_user@fvh/user:bela
+  fvh/partner:dhl#partner_user@fvh/user:neo
+  fvh/partner:fedex#partner_user@fvh/user:adi
 
   // assign partner admin role to users
-  partner:dhl#partner_admin@user:feri
+  fvh/partner:dhl#partner_admin@fvh/user:feri
 
   // assign api key manager role to users
-  partner:dhl#api_key_manager@user:mate
+  fvh/partner:dhl#api_key_manager@fvh/user:mate
 
   // set up subfleets
-  subfleet:budapest_south#owner@partner:dhl
-  subfleet:siofok#owner@partner:dhl
-  subfleet:kispest#owner@partner:dhl
-  subfleet:kispest#parent_subfleet@subfleet:budapest_south
+  fvh/subfleet:budapest_south#owner@fvh/partner:dhl
+  fvh/subfleet:siofok#owner@fvh/partner:dhl
+  fvh/subfleet:kispest#owner@fvh/partner:dhl
+  fvh/subfleet:kispest#parent_subfleet@fvh/subfleet:budapest_south
 
   // add members to subfleets
-  subfleet:budapest_south#subfleet_member@user:bela
-  subfleet:kispest#subfleet_member@user:neo
+  fvh/subfleet:budapest_south#subfleet_member@fvh/user:bela
+  fvh/subfleet:kispest#subfleet_member@fvh/user:neo
 
   // set up products
-  product:dashboard#parent_organization@organization:thebb
-  product:headless_api#parent_organization@organization:thebb
+  fvh/product:dashboard#parent_organization@fvh/organization:thebb
+  fvh/product:headless_api#parent_organization@fvh/organization:thebb
 
   // set up partner subscriptions
-  subscription:sub1263155181#subscriber@partner:dhl
-  subscription:sub993155181#subscriber@partner:fedex
+  fvh/subscription:sub1263155181#subscriber@fvh/partner:dhl
+  fvh/subscription:sub993155181#subscriber@fvh/partner:fedex
 
   // assign subscriptions to products
-  product:dashboard#associated_subscription@subscription:sub1263155181
-  product:headless_api#associated_subscription@subscription:sub993155181
+  fvh/product:dashboard#associated_subscription@fvh/subscription:sub1263155181
+  fvh/product:headless_api#associated_subscription@fvh/subscription:sub993155181
 assertions:
   assertTrue:
-    - organization:thebb#can_create_platform_user@user:tomi with {"user_fqdn":"thebb.com"}
-    - 'organization:thebb#can_create_platform_user@user:tomi with {"user_fqdn": "thebb.com"}'
-    - 'organization:thebb#can_create_partner@user:tomi with {"user_fqdn": "thebb.com"}'
-    - 'partner:dhl#partner_manager@user:tomi with {"user_fqdn": "thebb.com"}'
-    - 'partner:dhl#all_partner_user@user:tomi with {"user_fqdn": "thebb.com"}'
-    - 'partner:dhl#can_create_subfleet@user:tomi with {"user_fqdn": "thebb.com"}'
-    - 'partner:dhl#approve_vehicle@user:tomi with {"user_fqdn": "thebb.com"}'
-    - 'partner:dhl#can_create_partner_user@user:tomi with {"user_fqdn": "thebb.com"}'
-    - 'partner:dhl#can_assign_role_partner_admin@user:tomi with {"user_fqdn": "thebb.com"}'
-    - 'partner:dhl#manage_subscription@user:tomi with {"user_fqdn": "thebb.com"}'
-    - 'partner:dhl#view_subscription@user:tomi with {"user_fqdn": "thebb.com"}'
-    - 'subfleet:budapest_south#can_view_subfleet@user:tomi with {"user_fqdn": "thebb.com"}'
-    - 'subfleet:budapest_south#can_create_vehicle_request@user:tomi with {"user_fqdn": "thebb.com"}'
-    - subfleet:siofok#can_view_subfleet@user:feri
-    - subfleet:siofok#can_create_vehicle_request@user:feri
-    - partner:dhl#partner_manager@user:feri
-    - partner:dhl#all_partner_user@user:feri
-    - partner:dhl#can_create_subfleet@user:feri
-    - partner:dhl#approve_vehicle@user:feri
-    - partner:dhl#can_create_partner_user@user:feri
-    - partner:dhl#can_assign_role_partner_admin@user:feri
-    - partner:dhl#view_subscription@user:feri
-    - subfleet:budapest_south#can_view_subfleet@user:feri
-    - subfleet:budapest_south#can_create_vehicle_request@user:feri
-    - subfleet:siofok#can_view_subfleet@user:feri
-    - subfleet:siofok#can_create_vehicle_request@user:feri
-    - organization:thebb#can_create_partner@user:ben
-    - partner:dhl#partner_manager@user:ben
-    - partner:dhl#all_partner_user@user:ben
-    - partner:dhl#can_create_partner_user@user:ben
-    - partner:dhl#can_assign_role_partner_admin@user:ben
-    - partner:dhl#manage_subscription@user:ben
-    - partner:dhl#view_subscription@user:ben
-    - product:dashboard#can_access@user:tomi with {"user_fqdn":"thebb.com"}
-    - product:dashboard#can_access@user:marika
-    - product:headless_api#can_access@user:adi
-    - product:headless_api#can_access@user:tomi with {"user_fqdn":"thebb.com"}
-    - subfleet:kispest#can_view_subfleet@user:bela
-    - subfleet:kispest#can_view_subfleet@user:neo
+    - fvh/organization:thebb#can_create_platform_user@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/organization:thebb#can_create_platform_user@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/organization:thebb#can_create_partner@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#partner_manager@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#all_partner_user@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_create_subfleet@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#approve_vehicle@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_create_partner_user@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_assign_role_partner_admin@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#manage_subscription@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#view_subscription@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/subfleet:budapest_south#can_view_subfleet@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/subfleet:budapest_south#can_create_vehicle_request@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/organization:thebb#can_create_platform_user@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/organization:thebb#can_create_partner@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/organization:thebb#can_assign_role_account_manager@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/organization:thebb#can_assign_role_platform_admin@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/organization:thebb#can_assign_role_platform_support@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/organization:thebb#can_revoke_role_account_manager@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/organization:thebb#can_revoke_role_platform_admin@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/organization:thebb#can_revoke_role_platform_support@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/organization:thebb#can_view_performance@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#partner_manager@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#all_partner_user@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#synthetic_relation_platform_admin@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_view_partner@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_create_partner_user@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_manage_user@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_deassociate_user_from_partner@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_edit_partner_metadata@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_associate_subscription@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_manage_subscription@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_view_subscription@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_assign_role_partner_admin@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_assign_role_partner_api_manager@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_revoke_role_partner_admin@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_revoke_role_partner_api_manager@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_create_subfleet@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_edit_subfleet_metadata@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_list_all_subfleets@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_manage_vehicle_request@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_list_all_vehicle_request@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_remove_subfleet@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_deassociate_user_from_subfleet@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_deassociate_vehicle_from_subfleet@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_remove_vehicle@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_list_all_subfleet@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#approve_vehicle@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_create_vehicle@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_associate_user_to_subfleet@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_generate_api_key@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_list_all_api_key@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_remove_api_key@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#manage_subscription@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#view_subscription@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/partner:dhl#can_revoke_subscription@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/subfleet:budapest_south#synthetic_relation_platform_admin@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/subfleet:budapest_south#can_create_vehicle_deassociation_request@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/subfleet:budapest_south#can_remove_note@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/subfleet:budapest_south#can_create_vehicle_request@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/subfleet:budapest_south#can_view_subfleet@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/subfleet:budapest_south#can_order_and_manage_dongle@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/subfleet:budapest_south#can_connect_to_oem@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/subfleet:budapest_south#can_create_note@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/subfleet:siofok#can_view_subfleet@fvh/user:feri
+    - fvh/subfleet:siofok#can_create_vehicle_request@fvh/user:feri
+    - fvh/partner:dhl#partner_manager@fvh/user:feri
+    - fvh/partner:dhl#all_partner_user@fvh/user:feri
+    - fvh/partner:dhl#can_create_subfleet@fvh/user:feri
+    - fvh/partner:dhl#approve_vehicle@fvh/user:feri
+    - fvh/partner:dhl#can_create_partner_user@fvh/user:feri
+    - fvh/partner:dhl#can_assign_role_partner_admin@fvh/user:feri
+    - fvh/partner:dhl#view_subscription@fvh/user:feri
+    - fvh/subfleet:budapest_south#can_view_subfleet@fvh/user:feri
+    - fvh/subfleet:budapest_south#can_create_vehicle_request@fvh/user:feri
+    - fvh/subfleet:siofok#can_view_subfleet@fvh/user:feri
+    - fvh/subfleet:siofok#can_create_vehicle_request@fvh/user:feri
+    - fvh/organization:thebb#can_create_partner@fvh/user:ben
+    - fvh/partner:dhl#partner_manager@fvh/user:ben
+    - fvh/partner:dhl#all_partner_user@fvh/user:ben
+    - fvh/partner:dhl#can_create_partner_user@fvh/user:ben
+    - fvh/partner:dhl#can_assign_role_partner_admin@fvh/user:ben
+    - fvh/partner:dhl#manage_subscription@fvh/user:ben
+    - fvh/partner:dhl#view_subscription@fvh/user:ben
+    - fvh/product:dashboard#can_access@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/product:dashboard#can_access@fvh/user:marika
+    - fvh/product:headless_api#can_access@fvh/user:adi
+    - fvh/product:headless_api#can_access@fvh/user:tomi with {"user_fqdn":"thebb.com"}
+    - fvh/subfleet:kispest#can_view_subfleet@fvh/user:bela
+    - fvh/subfleet:kispest#can_view_subfleet@fvh/user:neo
   assertFalse:
-    - organization:thebb#can_create_platform_user@user:feri
-    - organization:thebb#can_create_partner@user:feri
-    - partner:dhl#manage_subscription@user:feri
-    - organization:thebb#can_create_platform_user@user:tomi with {"user_fqdn":"thecc.com"}
-    - organization:thebb#can_create_platform_user@account_manager:ben
-    - partner:dhl#can_create_subfleet@account_manager:ben
-    - partner:dhl#approve_vehicle@account_manager:ben
-    - product:headless_api#can_access@partner:dhl
-    - product:dashboard#can_access@partner:fedex
-    - subfleet:budapest_south#can_view_subfleet@user:ben
-    - subfleet:siofok#can_view_subfleet@user:ben
-    - subfleet:budapest_south#can_create_vehicle_request@user:ben
-    - subfleet:siofok#can_create_vehicle_request@user:ben
-    - subfleet:budapest_south#can_view_subfleet@user:neo
+    - fvh/organization:thebb#can_create_platform_user@fvh/user:feri
+    - fvh/organization:thebb#can_create_partner@fvh/user:feri
+    - fvh/partner:dhl#manage_subscription@fvh/user:feri
+    - fvh/organization:thebb#can_create_platform_user@fvh/user:tomi with {"user_fqdn":"thecc.com"}
+    - fvh/organization:thebb#can_create_platform_user@fvh/user:ben
+    - fvh/partner:dhl#can_create_subfleet@fvh/user:ben
+    - fvh/partner:dhl#approve_vehicle@fvh/user:ben
+    - fvh/product:headless_api#can_access@fvh/partner:dhl
+    - fvh/product:dashboard#can_access@fvh/partner:fedex
+    - fvh/subfleet:budapest_south#can_view_subfleet@fvh/user:ben
+    - fvh/subfleet:siofok#can_view_subfleet@fvh/user:ben
+    - fvh/subfleet:budapest_south#can_create_vehicle_request@fvh/user:ben
+    - fvh/subfleet:siofok#can_create_vehicle_request@fvh/user:ben
+    - fvh/subfleet:budapest_south#can_view_subfleet@fvh/user:neo
 validation: {}
