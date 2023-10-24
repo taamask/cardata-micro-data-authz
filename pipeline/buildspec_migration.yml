@@ -1,4 +1,13 @@
 version: 0.2
+env:
+  secrets-manager:
+    SPICEDB_TOKEN: spicedb/credentials:SecretString:spicedb_token:AWSCURRENT
+    SPICEDB_PASSWORD: spicedb/credentials:SecretString:postgres_spicedb_password:AWSCURRENT
+    SPICEDB_USERNAME: spicedb/credentials:SecretString:postgres_spicedb_username:AWSCURRENT
+  parameter-store:
+    SPICEDB_HOSTNAME: "/SpiceDbHostname"
+    SPICEDB_DATABASE_NAME: "/SpiceDbDatabaseName"
+    SPICEDB_SERVICE_ADDRESS: "/SpiceDbServiceAddress"
 proxy:
   upload-artifacts: no
   logs: no

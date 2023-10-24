@@ -196,18 +196,6 @@ Resources:
         - Name: RELEASE
           Value: develop
           Type: PLAINTEXT
-        - Name: SPICEDB_USERNAME
-          Value: '{{resolve:secretsmanager:spicedb/credentials:SecretString:postgres_spicedb_username}}'
-          Type: PLAINTEXT
-        - Name: SPICEDB_HOSTNAME
-          Value: !Ref SpiceDbHostname
-          Type: PLAINTEXT
-        - Name: SPICEDB_DATABASE_NAME
-          Value: !Ref SpiceDbDatabaseName
-          Type: PLAINTEXT
-        - Name: SPICEDB_PASSWORD
-          Value: '{{resolve:secretsmanager:spicedb/credentials:SecretString:postgres_spicedb_password}}'
-          Type: PLAINTEXT
       #Add Proxy
         - Name: AWS_REGION
           Value: !Ref AWS::Region
@@ -218,6 +206,13 @@ Resources:
 # CHANGE ConnectionString
         BuildSpec: |
           version: 0.2
+          env:
+            secrets-manager:
+              SPICEDB_PASSWORD: "spicedb/credentials:postgres_spicedb_password"
+              SPICEDB_USERNAME: "spicedb/credentials:postgres_spicedb_username"
+            parameter-store:
+              SPICEDB_HOSTNAME: "/SpiceDbHostname"
+              SPICEDB_DATABASE_NAME: "/SpiceDbDatabaseName"
           proxy:
             upload-artifacts: no
             logs: no
@@ -290,12 +285,6 @@ Resources:
         - Name: RELEASE
           Value: develop
           Type: PLAINTEXT
-        - Name: SPICEDB_SERVICE_ADDRESS
-          Value: !Ref SpiceDbServiceAddress
-          Type: PLAINTEXT
-        - Name: SPICEDB_TOKEN
-          Value: '{{resolve:secretsmanager:spicedb/credentials:SecretString:spicedb_token}}'
-          Type: PLAINTEXT
         - Name: AWS_REGION
           Value: !Ref AWS::Region
         - Name: AWS_ACCOUNT_ID
@@ -305,6 +294,11 @@ Resources:
         #Change in buildspex the IP endpoint and token
         BuildSpec: |
           version: 0.2
+          env:
+            secrets-manager:
+              SPICEDB_TOKEN: "spicedb/credentials:spicedb_token"
+            parameter-store:
+              SPICEDB_SERVICE_ADDRESS: "/SpiceDbServiceAddress"
           proxy:
             upload-artifacts: no
             logs: no
