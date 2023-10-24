@@ -236,8 +236,8 @@ Resources:
       Cluster: develop
       DesiredCount: 1
       DeploymentConfiguration:
-        MaximumPercent: 100
-        MinimumHealthyPercent: 80
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
       TaskDefinition: !Ref TaskDefinition
       NetworkConfiguration:
         AwsvpcConfiguration:
